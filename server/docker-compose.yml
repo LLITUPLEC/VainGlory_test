@@ -1,0 +1,69 @@
+# Ashfold / Nakama — тот же каркас, что у старого проекта (Postgres + ключи + порты).
+# Отличие от Lua: Go-плагин собирается в modules/backend.so (см. README), затем обычный up -d.
+
+services:
+  postgres:
+    container_name: postgres
+    image: postgres:12.2-alpine
+    environment:
+      - POSTGRES_DB=nakama
+      - POSTGRES_PASSWORD=Kolyok213131z_
+      - TZ=Europe/Moscow
+    volumes:
+      - data:/var/lib/postgresql/data
+    expose:
+      - "8080"
+      - "5432"
+    ports:
+      - "5432:5432"
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "nakama"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  nakama:
+    container_name: nakama
+    # Версия = та же, что pluginbuilder при сборке .so (см. build-plugin.sh)
+    image: registry.heroiclabs.com/heroiclabs/nakama:3.22.0
+    environment:
+      - TZ=Europe/Moscow
+    entrypoint:
+      - "/bin/sh"
+      - "-ecx"
+      - >
+        /nakama/nakama migrate up --database.address postgres:Kolyok213131z_@postgres:5432/nakama &&
+        exec /nakama/nakama --name nakama1 --database.address postgres:Kolyok213131z_@postgres:5432/nakama --logger.level INFO --session.token_expiry_sec 7200
+        --console.username Prokrust
+        --console.password Kolyok42650z_
+        --console.signing_key 'ImEJEQIWfbtbEkXQswa/WH3JkzxBGr0wRFSiswoSo4s='
+        --socket.server_key 'gDNVymCHsgbFr6QL4ENkImtds7Bu3T7bi1TG9QUDE0U='
+        --session.encryption_key '/PFZZxyo/CC9JhNxMXS2gzV1zQqnmrDSXdaMmWiBdgg='
+        --session.refresh_encryption_key '5SwFvzkSEQBb7sXniOJI8+xXPUvXUf85roaNrJDzSH0='
+        --runtime.http_key simplekey123
+    restart: always
+    links:
+      - "postgres:db"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Как раньше: весь каталог server/ → /nakama/data (modules/*.so | *.lua)
+    volumes:
+      - ./:/nakama/data
+    expose:
+      - "7349"
+      - "7350"
+      - "7351"
+    ports:
+      - "192.168.9.24:7351:7351"
+      - "192.168.9.24:7350:7350"
+      - "192.168.9.24:7349:7349"
+    healthcheck:
+      test: ["CMD", "/nakama/nakama", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  data:

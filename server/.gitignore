@@ -1,0 +1,6 @@
+.env
+pgdata/
+modules/*.so
+backend.so
+*.so
+!modules/.gitkeep
