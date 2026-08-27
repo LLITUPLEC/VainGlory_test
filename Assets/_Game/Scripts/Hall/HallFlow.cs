@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 namespace Ashfold
 {
-    /// <summary>Hall VG-компоновка + каталог + PLAY в очередь.</summary>
+    /// <summary>Hall: мета Nakama без боевого матча. Сокет матча открывается только в очереди (этап 5.7).</summary>
     public sealed class HallFlow : MonoBehaviour
     {
         Text _showcaseName;

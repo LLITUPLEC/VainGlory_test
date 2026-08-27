@@ -5,6 +5,7 @@ namespace Ashfold
     public interface IAuthService
     {
         bool SupportsEmail { get; }
+        string DeviceId { get; }
         Task<PlayerProfile> TryRestoreAsync();
         Task<PlayerProfile> SignInGuestAsync(string preferredName);
         Task<PlayerProfile> SignInEmailAsync(string email, string password);

@@ -26,6 +26,7 @@ namespace Ashfold
         public float GroundY = 1f;
 
         public float Resist;
+        public int NetId;
         public System.Action Damaged;
 
         public bool DisableOnDeath = true;

@@ -21,6 +21,7 @@ namespace Ashfold
         public string ModeName = "Casual 3v3";
         public string MapName = "Ashfold Lane";
         public string NakamaMatchId;
+        public bool IsNetworked => !string.IsNullOrEmpty(NakamaMatchId);
         public readonly List<MatchParticipant> Players = new List<MatchParticipant>(6);
 
         public MatchParticipant Local
@@ -50,6 +51,8 @@ namespace Ashfold
     public sealed class NakamaRosterDto
     {
         public string type;
+        public string phase;
+        public float draftLeft;
         public int count;
         public NakamaRosterPlayer[] players;
     }
@@ -61,6 +64,102 @@ namespace Ashfold
         public string username;
         public int team;
         public int slot;
+        public string heroId;
+        public bool locked;
+        public bool bot;
+    }
+
+    [Serializable]
+    public sealed class NetSnapshotDto
+    {
+        public string type;
+        public long tick;
+        public string phase;
+        public float matchTime;
+        public int winnerTeam;
+        public bool surrendered;
+        public NetEntityDto[] entities;
+        public NetHitDto[] hits;
+    }
+
+    [Serializable]
+    public sealed class NetEntityDto
+    {
+        public int id;
+        public string kind;
+        public string userId;
+        public string heroId;
+        public int team;
+        public int slot;
+        public float x;
+        public float z;
+        public float yaw;
+        public float hp;
+        public float maxHp;
+        public float respawn;
+        public bool alive;
+        public bool bot;
+        public int kills;
+        public int deaths;
+        public int gold;
+        public int targetId;
+        public int ackSeq;
+        public float stunLeft;
+        public bool recalling;
+        public float recallLeft;
+    }
+
+    [Serializable]
+    public sealed class NetHitDto
+    {
+        public int src;
+        public int dst;
+        public float dmg;
+        public int kill;
+    }
+
+    [Serializable]
+    public sealed class NetVecDto
+    {
+        public float x;
+        public float z;
+        public int seq;
+    }
+
+    [Serializable]
+    public sealed class NetTargetDto
+    {
+        public int targetId;
+        public int seq;
+    }
+
+    [Serializable]
+    public sealed class NetSkillDto
+    {
+        public float yaw;
+        public int seq;
+    }
+
+    [Serializable]
+    public sealed class NetSeqDto
+    {
+        public int seq;
+    }
+
+    [Serializable]
+    public sealed class NetPingDto
+    {
+        public float x;
+        public float z;
+        public int team;
+        public string userId;
+        public string name;
+    }
+
+    [Serializable]
+    public sealed class NetHeroPickDto
+    {
+        public string heroId;
     }
 
     public static class MatchRoster
@@ -82,9 +181,11 @@ namespace Ashfold
                         UserId = h.userId,
                         Name = string.IsNullOrEmpty(h.username) ? "Player" : h.username,
                         IsLocal = h.userId == localUserId,
-                        IsBot = false,
+                        IsBot = h.bot,
                         Team = team,
-                        Slot = slot
+                        Slot = slot,
+                        HeroId = h.heroId,
+                        Locked = h.locked
                     });
                     used[team, slot] = true;
                 }

@@ -139,6 +139,7 @@ namespace Ashfold
             Add("boot.signing_nakama", "Signing in via Nakama…", "Вход через Nakama…");
             Add("boot.signing_email", "Signing in with email…", "Вход по email…");
             Add("boot.enter_fold", "ENTER THE FOLD", "ВОЙТИ В FOLD");
+            Add("boot.kicked_device", "Signed in on another device — please log in again", "Вход с другого устройства — войдите снова");
             Add("boot.tap_enter", "TAP TO ENTER", "НАЖМИТЕ, ЧТОБЫ ВОЙТИ");
             Add("boot.email_hint", "Email sign-in  ·  account from another device", "Вход по email  ·  аккаунт с другого устройства");
             Add("boot.name_ph", "Commander name", "Имя командира");
@@ -244,7 +245,7 @@ namespace Ashfold
             Add("draft.bot", "BOT · ", "БОТ · ");
             Add("draft.dawn", "DAWN", "РАССВЕТ");
             Add("draft.dusk", "DUSK", "ЗАКАТ");
-            Add("draft.stage", "STAGE 2.7  ·  DRAFT", "ЭТАП 2.7  ·  ДРАФТ");
+            Add("draft.stage", "STAGE 5.4A  ·  DRAFT", "ЭТАП 5.4A  ·  ДРАФТ");
 
             Add("loading.map", "ASHFOLD LANE", "ЛИНИЯ ASHFOLD");
             Add("loading.mode", "CASUAL 3v3  ·  NAKAMA QUEUE", "ОБЫЧНЫЙ 3v3  ·  ОЧЕРЕДЬ NAKAMA");
@@ -254,13 +255,17 @@ namespace Ashfold
             Add("results.victory", "VICTORY", "ПОБЕДА");
             Add("results.defeat", "DEFEAT", "ПОРАЖЕНИЕ");
             Add("results.surrender", "DEFEAT  ·  SURRENDER", "ПОРАЖЕНИЕ  ·  СДАЧА");
+            Add("results.victory_surrender", "VICTORY  ·  SURRENDER", "ПОБЕДА  ·  СДАЧА");
             Add("results.continue", "CONTINUE", "ПРОДОЛЖИТЬ");
             Add("results.hdr", "PLAYER            KDA      GOLD", "ИГРОК            KDA      ЗОЛОТО");
             Add("results.line", "{0}  ·  {1}  ·  +{2} ESSENCE", "{0}  ·  {1}  ·  +{2} ЭССЕНЦИЯ");
             Add("results.stage", "STAGE 4  ·  RESULTS", "ЭТАП 4  ·  РЕЗУЛЬТАТЫ");
 
             Add("hud.items_empty", "ITEMS —", "ПРЕДМЕТЫ —");
-            Add("hud.hint", "LMB attack  ·  Q  ·  B shop  ·  R recall", "ЛКМ атака  ·  Q  ·  B магазин  ·  R возврат");
+            Add("hud.hint", "LMB attack  ·  minimap ping  ·  Alt+LMB  ·  Q  ·  B shop  ·  R recall", "ЛКМ атака  ·  пинг на миникарте  ·  Alt+ЛКМ  ·  Q  ·  B магазин  ·  R возврат");
+            Add("hud.hint_net", "LMB move / attack  ·  minimap ping  ·  Alt+LMB  ·  10 Hz", "ЛКМ ход / атака  ·  пинг на миникарте  ·  Alt+ЛКМ  ·  10 Гц");
+            Add("hud.reconnecting", "RECONNECTING  {0}s", "ПЕРЕПОДКЛЮЧЕНИЕ  {0} с");
+            Add("hud.rejoin_fail", "Reconnect failed", "Не удалось переподключиться");
             Add("hud.shop", "SHOP", "МАГАЗИН");
             Add("hud.recall", "RECALL", "ВОЗВРАТ");
             Add("hud.surrender", "SURRENDER", "СДАТЬСЯ");
@@ -269,7 +274,7 @@ namespace Ashfold
             Add("hud.shop_fountain", "Shop only at fountain  ·  R to recall", "Магазин только у фонтана  ·  R для возврата");
             Add("hud.recalling", "Recalling…  {0:0.0}s", "Возврат…  {0:0.0}с");
             Add("hud.fountain", "FOUNTAIN  ·  B shop  ·  Q skill", "ФОНТАН  ·  B магазин  ·  Q умение");
-            Add("hud.stage", "STAGE 6.1–6.2  ·  BRUSH / MINIMAP", "ЭТАП 6.1–6.2  ·  КУСТЫ / МИНИКАРТА");
+            Add("hud.stage", "STAGE 6.3  ·  MAP PING", "ЭТАП 6.3  ·  ПИНГ ПО КАРТЕ");
             Add("shop.fountain", "FOUNTAIN SHOP  ·  {0} G", "МАГАЗИН ФОНТАНА  ·  {0} G");
             Add("shop.close", "CLOSE", "ЗАКРЫТЬ");
         }

@@ -14,6 +14,8 @@ namespace Ashfold
 
         public bool SupportsEmail => false;
 
+        public string DeviceId => PlayerPrefs.GetString(KeyId, string.Empty);
+
         public async Task<PlayerProfile> TryRestoreAsync()
         {
             if (!HasSavedGuest)

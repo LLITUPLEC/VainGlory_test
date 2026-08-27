@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Text;
 using Nakama;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -8,7 +7,7 @@ using UnityEngine.UI;
 
 namespace Ashfold
 {
-    /// <summary>PLAY → режим → очередь → драфт → loading. Photon не трогаем (этап 5).</summary>
+    /// <summary>PLAY → режим → очередь → драфт → loading. Nakama-комната держится до Results.</summary>
     public sealed class MatchPrepFlow : MonoBehaviour
     {
         const float QueueSeconds = 3.2f;
@@ -27,7 +26,6 @@ namespace Ashfold
         bool _locked;
         bool _queueCancelled;
         IMatchmakerMatched _matched;
-        NakamaRosterDto _roster;
 
         public void OpenModeSelect()
         {
@@ -106,7 +104,6 @@ namespace Ashfold
         {
             _queueCancelled = false;
             _matched = null;
-            _roster = null;
             var nk = GameSession.I.Nakama;
             if (_status != null)
                 _status.text = Loc.T("queue.connecting");
@@ -123,19 +120,18 @@ namespace Ashfold
             }
 
             nk.Socket.ReceivedMatchmakerMatched += OnMatched;
-            nk.Socket.ReceivedMatchState += OnMatchState;
 
             var add = nk.AddMatchmakerAsync();
             while (!add.IsCompleted)
                 yield return null;
             if (_queueCancelled)
             {
-                UnhookSocket();
+                UnhookMatchmaker();
                 yield break;
             }
             if (add.IsFaulted)
             {
-                UnhookSocket();
+                UnhookMatchmaker();
                 ShowQueueError(add.Exception);
                 yield break;
             }
@@ -151,7 +147,7 @@ namespace Ashfold
 
             if (_queueCancelled)
             {
-                UnhookSocket();
+                UnhookMatchmaker();
                 yield break;
             }
 
@@ -162,31 +158,31 @@ namespace Ashfold
                 yield return null;
             if (_queueCancelled)
             {
-                UnhookSocket();
+                UnhookMatchmaker();
                 yield break;
             }
             if (join.IsFaulted)
             {
-                UnhookSocket();
+                UnhookMatchmaker();
                 ShowQueueError(join.Exception);
                 yield break;
             }
 
+            UnhookMatchmaker();
             var wait = 0f;
-            while (_roster == null && wait < 8f && !_queueCancelled)
+            var mc = GameSession.I.MatchClient;
+            while ((mc == null || mc.Roster == null) && wait < 8f && !_queueCancelled)
             {
                 wait += Time.deltaTime;
                 yield return null;
             }
 
-            UnhookSocket();
             if (_queueCancelled)
                 yield break;
 
-            var localId = GameSession.I.Profile != null ? GameSession.I.Profile.UserId : "";
-            var roster = _roster ?? FallbackRoster(nk.CurrentMatch, localId);
-            GameSession.I.Match = MatchRoster.FromNakama(roster, localId, nk.CurrentMatch != null ? nk.CurrentMatch.Id : "");
-            Debug.Log("[Ashfold] Match roster humans=" + (roster.players != null ? roster.players.Length : 0));
+            ApplyLiveRoster();
+            Debug.Log("[Ashfold] Match room " + (nk.CurrentMatch != null ? nk.CurrentMatch.Id : "") +
+                      " humans=" + (GameSession.I.Match != null ? GameSession.I.Match.Players.Count : 0));
 
             ShowMatchFound();
             yield return new WaitForSeconds(FoundSeconds);
@@ -198,22 +194,7 @@ namespace Ashfold
             _matched = matched;
         }
 
-        void OnMatchState(IMatchState state)
-        {
-            if (state == null || state.OpCode != NakamaConnection.OpRoster || state.State == null)
-                return;
-            try
-            {
-                var json = Encoding.UTF8.GetString(state.State);
-                _roster = JsonUtility.FromJson<NakamaRosterDto>(json);
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogWarning("[Ashfold] Roster parse: " + e.Message);
-            }
-        }
-
-        void UnhookSocket()
+        void UnhookMatchmaker()
         {
             var socket = GameSession.I != null && GameSession.I.Nakama != null
                 ? GameSession.I.Nakama.Socket
@@ -221,7 +202,18 @@ namespace Ashfold
             if (socket == null)
                 return;
             socket.ReceivedMatchmakerMatched -= OnMatched;
-            socket.ReceivedMatchState -= OnMatchState;
+        }
+
+        void ApplyLiveRoster()
+        {
+            var nk = GameSession.I != null ? GameSession.I.Nakama : null;
+            var mc = GameSession.I != null ? GameSession.I.MatchClient : null;
+            var localId = GameSession.I.Profile != null ? GameSession.I.Profile.UserId : "";
+            var matchId = nk != null && nk.CurrentMatch != null ? nk.CurrentMatch.Id : "";
+            var roster = mc != null ? mc.Roster : null;
+            if (roster == null)
+                roster = FallbackRoster(nk != null ? nk.CurrentMatch : null, localId);
+            GameSession.I.Match = MatchRoster.FromNakama(roster, localId, matchId);
         }
 
         void ShowQueueError(System.AggregateException ex)
@@ -293,7 +285,7 @@ namespace Ashfold
         void CancelQueue()
         {
             _queueCancelled = true;
-            UnhookSocket();
+            UnhookMatchmaker();
             if (_routine != null)
                 StopCoroutine(_routine);
             _routine = null;
@@ -364,7 +356,10 @@ namespace Ashfold
 
             SelectHero(_pickedId);
             RefreshSlots();
-            _routine = StartCoroutine(DraftRoutine());
+            if (GameSession.I != null && GameSession.I.Match != null && GameSession.I.Match.IsNetworked)
+                _routine = StartCoroutine(NetDraftRoutine());
+            else
+                _routine = StartCoroutine(DraftRoutine());
         }
 
         void BuildTeamColumn(Transform root, int team, float x, string title)
@@ -397,6 +392,14 @@ namespace Ashfold
                 var selected = GameContent.Heroes[i].Id == id;
                 _heroCards[i].color = selected ? GameTheme.GoldDim : GameTheme.BgPanel;
             }
+            if (NetDraft())
+            {
+                var local = GameSession.I.Match.Local;
+                if (local != null && !local.Locked)
+                    local.HeroId = id;
+                GameSession.I.MatchClient.SendPick(id);
+                RefreshSlots();
+            }
         }
 
         void LockIn()
@@ -409,7 +412,52 @@ namespace Ashfold
             local.Locked = true;
             _lockBtn.interactable = false;
             _lockBtn.GetComponentInChildren<Text>().text = Loc.T("draft.locked");
+            if (NetDraft())
+                GameSession.I.MatchClient.SendLock(_pickedId);
             RefreshSlots();
+        }
+
+        static bool NetDraft()
+        {
+            return GameSession.I != null
+                   && GameSession.I.Match != null
+                   && GameSession.I.Match.IsNetworked
+                   && GameSession.I.MatchClient != null;
+        }
+
+        IEnumerator NetDraftRoutine()
+        {
+            if (!_locked)
+                SelectHero(_pickedId);
+
+            while (true)
+            {
+                ApplyLiveRoster();
+                var local = GameSession.I.Match != null ? GameSession.I.Match.Local : null;
+                if (local != null && local.Locked && !_locked)
+                {
+                    _locked = true;
+                    if (_lockBtn != null)
+                    {
+                        _lockBtn.interactable = false;
+                        _lockBtn.GetComponentInChildren<Text>().text = Loc.T("draft.locked");
+                    }
+                }
+                var mc = GameSession.I.MatchClient;
+                var phase = mc != null ? mc.Phase : "";
+                if (_timer != null)
+                    _timer.text = "0:" + Mathf.CeilToInt(Mathf.Max(0f, mc != null ? mc.DraftLeft : 0f)).ToString("00");
+                RefreshSlots();
+
+                if (phase == "loading" || phase == "combat" || phase == "ended")
+                    break;
+                yield return null;
+            }
+
+            if (!_locked)
+                LockIn();
+            yield return new WaitForSeconds(0.4f);
+            OpenLoading();
         }
 
         IEnumerator DraftRoutine()

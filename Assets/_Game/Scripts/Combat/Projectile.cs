@@ -65,6 +65,11 @@ namespace Ashfold
 
         public static void Spawn(CombatUnit owner, CombatUnit target, float damage, Color color)
         {
+            Spawn(owner, target, damage, color, false);
+        }
+
+        public static void Spawn(CombatUnit owner, CombatUnit target, float damage, Color color, bool visualOnly)
+        {
             var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             go.name = "Bolt";
             Object.Destroy(go.GetComponent<Collider>());
@@ -74,7 +79,7 @@ namespace Ashfold
             var p = go.AddComponent<Projectile>();
             p.Owner = owner;
             p.Target = target;
-            p.Damage = damage;
+            p.Damage = visualOnly ? 0f : damage;
             p.Homing = true;
             p.HitRadius = 1.15f;
             if (target != null)

@@ -203,6 +203,9 @@ namespace Ashfold
             _tapHint.text = string.Empty;
             if (!keepStatus)
                 _status.text = Loc.T("boot.enter_fold");
+            var kicked = NakamaSessionClaim.ConsumeKickMessage();
+            if (!string.IsNullOrEmpty(kicked))
+                _status.text = kicked;
             if (string.IsNullOrEmpty(_nameField.text))
                 _nameField.text = "Warrior_" + Random.Range(1000, 9999);
         }

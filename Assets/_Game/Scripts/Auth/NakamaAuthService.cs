@@ -14,6 +14,8 @@ namespace Ashfold
 
         public bool SupportsEmail => true;
 
+        public string DeviceId => PlayerPrefs.GetString(KeyDevice, string.Empty);
+
         public NakamaAuthService(NakamaConnection conn)
         {
             _conn = conn;
@@ -77,6 +79,8 @@ namespace Ashfold
         public void SignOutLocal()
         {
             _conn.ClearStoredSession();
+            PlayerPrefs.SetString(KeyDevice, NewDeviceId());
+            PlayerPrefs.Save();
         }
 
         async Task<PlayerProfile> FinishAsync()
@@ -123,6 +127,8 @@ namespace Ashfold
 
             await NakamaProgress.HydrateAsync(_conn, profile);
 
+            await NakamaSessionClaim.PublishAsync(_conn, EnsureDeviceId());
+
             try
             {
                 var health = await _conn.RpcAsync("ashfold_health");
@@ -141,13 +147,16 @@ namespace Ashfold
             var deviceId = PlayerPrefs.GetString(KeyDevice, string.Empty);
             if (string.IsNullOrEmpty(deviceId))
             {
-                deviceId = "af_" + SystemInfo.deviceUniqueIdentifier;
-                if (deviceId.Length > 128)
-                    deviceId = deviceId.Substring(0, 128);
+                deviceId = NewDeviceId();
                 PlayerPrefs.SetString(KeyDevice, deviceId);
                 PlayerPrefs.Save();
             }
             return deviceId;
+        }
+
+        static string NewDeviceId()
+        {
+            return "af_" + Guid.NewGuid().ToString("N");
         }
 
         static string ResolveName(string preferredName)

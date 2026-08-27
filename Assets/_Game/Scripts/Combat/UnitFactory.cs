@@ -55,7 +55,7 @@ namespace Ashfold
             }
         }
 
-        public static GameObject SpawnMinion(Transform parent, Vector3 pos, TeamId team, Vector3 laneGoal)
+        public static GameObject SpawnMinion(Transform parent, Vector3 pos, TeamId team, Vector3 laneGoal, bool localAi = true)
         {
             var color = team == TeamId.Dawn ? Color.Lerp(GameTheme.Teal, Color.white, 0.25f) : Color.Lerp(GameTheme.Crimson, Color.white, 0.2f);
             var go = GameObject.CreatePrimitive(PrimitiveType.Capsule);
@@ -77,18 +77,24 @@ namespace Ashfold
             motor.Speed = 4.6f;
             motor.GroundY = 0.7f;
 
-            var ai = go.AddComponent<MeleeAi>();
-            ai.Unit = unit;
-            ai.Motor = motor;
-            ai.Damage = 16f;
-            ai.Range = 1.7f;
-            ai.Aggro = 5.2f;
-            ai.LaneGoal = laneGoal;
+            if (localAi)
+            {
+                var ai = go.AddComponent<MeleeAi>();
+                ai.Unit = unit;
+                ai.Motor = motor;
+                ai.Damage = 16f;
+                ai.Range = 1.7f;
+                ai.Aggro = 5.2f;
+                ai.LaneGoal = laneGoal;
+            }
+            else
+                motor.enabled = false;
+
             WorldHpBar.Attach(unit);
             return go;
         }
 
-        public static CombatUnit MakeStructure(GameObject go, TeamId team, float hp, int bounty, string name, bool turret)
+        public static CombatUnit MakeStructure(GameObject go, TeamId team, float hp, int bounty, string name, bool turret, bool localAi = true)
         {
             var unit = go.AddComponent<CombatUnit>();
             unit.Team = team;
@@ -98,7 +104,7 @@ namespace Ashfold
             unit.IsStructure = true;
             unit.DisableOnDeath = false;
             unit.DisplayName = name;
-            if (turret)
+            if (turret && localAi)
             {
                 var ai = go.AddComponent<TurretAi>();
                 ai.Unit = unit;
@@ -131,6 +137,31 @@ namespace Ashfold
             camp.Unit = unit;
             camp.Bind();
             WorldHpBar.Attach(unit);
+        }
+
+        public static GameObject SpawnCamp(Transform parent, Vector3 pos)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.name = "Camp";
+            go.transform.SetParent(parent, false);
+            go.transform.position = pos;
+            go.transform.localScale = Vector3.one * 1.4f;
+            go.GetComponent<Renderer>().sharedMaterial = RuntimeMat.Make(GameTheme.Hex(0x4A6A38));
+
+            var unit = go.AddComponent<CombatUnit>();
+            unit.Team = TeamId.Neutral;
+            unit.MaxHp = 220f;
+            unit.Hp = 220f;
+            unit.Bounty = 28;
+            unit.DisplayName = "Camp";
+            unit.DisableOnDeath = false;
+            unit.GroundY = 0.4f;
+            var motor = go.AddComponent<TapMoveMotor>();
+            motor.Speed = 3.2f;
+            motor.GroundY = 0.4f;
+            motor.enabled = false;
+            WorldHpBar.Attach(unit);
+            return go;
         }
 
         static void ApplySilhouette(Transform root, string id, Color color)

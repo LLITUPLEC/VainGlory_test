@@ -20,6 +20,8 @@ namespace Ashfold
         Button _surrender;
         Image _recallBar;
         GameObject _deathPanel;
+        GameObject _netPanel;
+        Text _netText;
         bool _dead;
 
         public static BattleHud Create(CombatUnit player, HeroCombat combat)
@@ -40,6 +42,20 @@ namespace Ashfold
                 _surrender.onClick.RemoveAllListeners();
                 _surrender.onClick.AddListener(action);
             }
+        }
+
+        public void SetHint(string text)
+        {
+            if (_hint != null)
+                _hint.text = text;
+        }
+
+        public void SetNetStatus(string text, bool show)
+        {
+            if (_netPanel != null)
+                _netPanel.SetActive(show);
+            if (show && _netText != null)
+                _netText.text = text;
         }
 
         public void SetDeathTimer(float seconds)
@@ -116,6 +132,10 @@ namespace Ashfold
             _deathPanel = UiFactory.Box(root, new Vector2(0.35f, 0.42f), new Vector2(0.65f, 0.58f), Vector2.zero, Vector2.zero, GameTheme.Hex(0x000000, 0.65f), "Death").gameObject;
             _death = UiFactory.Label(_deathPanel.transform, Loc.T("hud.respawn", 5), 32, GameTheme.Crimson, TextAnchor.MiddleCenter, FontStyle.Bold, true);
             _deathPanel.SetActive(false);
+
+            _netPanel = UiFactory.Box(root, new Vector2(0.25f, 0.40f), new Vector2(0.75f, 0.60f), Vector2.zero, Vector2.zero, GameTheme.Hex(0x000000, 0.72f), "Net").gameObject;
+            _netText = UiFactory.Label(_netPanel.transform, Loc.T("hud.reconnecting", 30), 26, GameTheme.Gold, TextAnchor.MiddleCenter, FontStyle.Bold, true);
+            _netPanel.SetActive(false);
 
             var stage = UiFactory.Box(root, new Vector2(0.32f, 0.94f), new Vector2(0.68f, 0.99f), Vector2.zero, Vector2.zero, Color.clear, "St");
             UiFactory.Label(stage.transform, Loc.T("hud.stage"), 14, GameTheme.GoldDim, TextAnchor.MiddleCenter);

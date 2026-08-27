@@ -32,7 +32,9 @@ namespace Ashfold
             UiFactory.Panel(root, GameTheme.Bg, "Bg");
 
             var banner = UiFactory.Box(root, new Vector2(0.15f, 0.82f), new Vector2(0.85f, 0.96f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Banner");
-            var title = result.Surrendered ? Loc.T("results.surrender") : (result.Victory ? Loc.T("results.victory") : Loc.T("results.defeat"));
+            var title = result.Victory
+                ? (result.Surrendered ? Loc.T("results.victory_surrender") : Loc.T("results.victory"))
+                : (result.Surrendered ? Loc.T("results.surrender") : Loc.T("results.defeat"));
             UiFactory.Label(banner.transform, title, 48, result.Victory ? GameTheme.Gold : GameTheme.Crimson, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             var sub = UiFactory.Box(root, new Vector2(0.2f, 0.76f), new Vector2(0.8f, 0.82f), Vector2.zero, Vector2.zero, Color.clear, "Sub");

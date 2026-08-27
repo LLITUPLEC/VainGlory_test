@@ -32,6 +32,11 @@ namespace Ashfold
                 return;
             var screen = PointerScreen();
             var ray = cam.ScreenPointToRay(screen);
+            if (PingHeld() && PlanePoint(ray, out var pingAt))
+            {
+                MapPingFx.TrySend(pingAt);
+                return;
+            }
             var unit = PickUnit(ray);
             if (unit == null && PlanePoint(ray, out var ground))
                 unit = NearestUnit(ground, 1.5f);
@@ -39,16 +44,38 @@ namespace Ashfold
             if (unit != null && Unit.IsEnemy(unit))
             {
                 Hero.CommandAttack(unit);
+                if (Net())
+                    GameSession.I.MatchClient.SendAttack(unit.NetId);
                 return;
             }
 
             if (PlanePoint(ray, out var point))
+            {
                 Hero.CommandMove(point);
+                if (Net())
+                    GameSession.I.MatchClient.SendMove(point.x, point.z);
+            }
+        }
+
+        static bool Net()
+        {
+            return GameSession.I != null
+                   && GameSession.I.Match != null
+                   && GameSession.I.Match.IsNetworked
+                   && GameSession.I.MatchClient != null;
         }
 
         static bool QPressed()
         {
             return PressedKey(UnityEngine.InputSystem.Key.Q);
+        }
+
+        static bool PingHeld()
+        {
+            if (Keyboard.current == null)
+                return false;
+            return Keyboard.current.leftAltKey.isPressed || Keyboard.current.rightAltKey.isPressed
+                   || Keyboard.current.gKey.isPressed;
         }
 
         static bool PressedKey(UnityEngine.InputSystem.Key key)

@@ -1,4 +1,5 @@
 using System.Collections;
+using Nakama;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
@@ -9,11 +10,16 @@ namespace Ashfold
     {
         BattleRuntime _runtime;
         MatchStatsTracker _stats;
+        NetBattleSync _net;
         HeroCombat _hero;
         Vector3 _spawn;
         BattleHud _hud;
         bool _playerDead;
         float _respawnLeft;
+        bool _networked;
+        ISocket _hooked;
+        volatile bool _socketDrop;
+        bool _reconnecting;
 
         void Awake()
         {
@@ -24,6 +30,12 @@ namespace Ashfold
 
         void Start()
         {
+            _networked = GameSession.I != null && GameSession.I.Match != null && GameSession.I.Match.IsNetworked;
+            if (Application.isMobilePlatform)
+            {
+                QualitySettings.shadows = ShadowQuality.Disable;
+                QualitySettings.antiAliasing = 0;
+            }
             RenderSettings.ambientMode = AmbientMode.Flat;
             RenderSettings.ambientLight = new Color(0.22f, 0.28f, 0.30f);
             var sun = new GameObject("Sun");
@@ -36,20 +48,46 @@ namespace Ashfold
             var map = FoldMapBuilder.Build(transform);
             _spawn = map.DawnSpawn;
 
-            foreach (var camp in map.Camps)
-                UnitFactory.MakeCamp(camp);
+            if (_networked)
+            {
+                _net = gameObject.AddComponent<NetBattleSync>();
+                _runtime.CrystalDawn = UnitFactory.MakeStructure(map.CrystalDawn, TeamId.Dawn, 1400f, 0, "Crystal", false, false);
+                _runtime.CrystalDusk = UnitFactory.MakeStructure(map.CrystalDusk, TeamId.Dusk, 1400f, 200, "Crystal", false, false);
+                var turretDawn = UnitFactory.MakeStructure(map.TurretDawn, TeamId.Dawn, 1100f, 0, "Turret", true, false);
+                var turretDusk = UnitFactory.MakeStructure(map.TurretDusk, TeamId.Dusk, 1100f, 120, "Turret", true, false);
+                _net.Register(10, turretDawn);
+                _net.Register(11, turretDusk);
+                _net.Register(12, _runtime.CrystalDawn);
+                _net.Register(13, _runtime.CrystalDusk);
+                if (map.Camps != null)
+                {
+                    foreach (var camp in map.Camps)
+                    {
+                        if (camp != null)
+                            camp.SetActive(false);
+                    }
+                }
+            }
+            else
+            {
+                foreach (var camp in map.Camps)
+                    UnitFactory.MakeCamp(camp);
 
-            _runtime.CrystalDawn = UnitFactory.MakeStructure(map.CrystalDawn, TeamId.Dawn, 1400f, 0, "Crystal", false);
-            _runtime.CrystalDusk = UnitFactory.MakeStructure(map.CrystalDusk, TeamId.Dusk, 1400f, 200, "Crystal", false);
-            UnitFactory.MakeStructure(map.TurretDawn, TeamId.Dawn, 1100f, 0, "Turret", true);
-            UnitFactory.MakeStructure(map.TurretDusk, TeamId.Dusk, 1100f, 120, "Turret", true);
-            _runtime.CrystalDawn.Killed += OnCrystalDown;
-            _runtime.CrystalDusk.Killed += OnCrystalDown;
+                _runtime.CrystalDawn = UnitFactory.MakeStructure(map.CrystalDawn, TeamId.Dawn, 1400f, 0, "Crystal", false);
+                _runtime.CrystalDusk = UnitFactory.MakeStructure(map.CrystalDusk, TeamId.Dusk, 1400f, 200, "Crystal", false);
+                UnitFactory.MakeStructure(map.TurretDawn, TeamId.Dawn, 1100f, 0, "Turret", true);
+                UnitFactory.MakeStructure(map.TurretDusk, TeamId.Dusk, 1100f, 120, "Turret", true);
+                _runtime.CrystalDawn.Killed += OnCrystalDown;
+                _runtime.CrystalDusk.Killed += OnCrystalDown;
+            }
 
             SpawnRoster(map);
 
-            var waves = gameObject.AddComponent<WaveSpawner>();
-            waves.Parent = transform;
+            if (!_networked)
+            {
+                var waves = gameObject.AddComponent<WaveSpawner>();
+                waves.Parent = transform;
+            }
 
             var cam = Camera.main;
             if (cam != null && _hero != null)
@@ -62,8 +100,16 @@ namespace Ashfold
                 cam.transform.rotation = Quaternion.Euler(52f, 0f, 0f);
             }
 
-            _hud = BattleHud.Create(_hero.Unit, _hero);
-            _hud.SetSurrender(Surrender);
+            if (_hero != null)
+            {
+                _hud = BattleHud.Create(_hero.Unit, _hero);
+                _hud.SetSurrender(Surrender);
+                if (_networked)
+                    _hud.SetHint(Loc.T("hud.hint_net"));
+            }
+
+            if (_networked)
+                HookSocket();
         }
 
         void SpawnRoster(FoldMap map)
@@ -80,23 +126,23 @@ namespace Ashfold
                 return;
             }
 
-            var dawnIndex = 0;
-            var duskIndex = 0;
             foreach (var p in match.Players)
             {
                 var team = p.Team == 0 ? TeamId.Dawn : TeamId.Dusk;
                 var basePos = team == TeamId.Dawn ? map.DawnSpawn : map.DuskSpawn;
-                var lane = team == TeamId.Dawn ? dawnIndex++ : duskIndex++;
-                var offset = new Vector3(team == TeamId.Dawn ? 2f : -2f, 0f, (lane - 1) * 2f);
+                var offset = new Vector3(team == TeamId.Dawn ? 2f : -2f, 0f, (p.Slot - 1) * 2f);
                 var heroId = string.IsNullOrEmpty(p.HeroId) ? "bastion" : p.HeroId;
+                var netId = p.Team * 3 + p.Slot + 1;
                 if (p.IsLocal)
-                    SpawnHero(p.Name, heroId, team, basePos, true);
+                    SpawnHero(p.Name, heroId, team, basePos, true, p.IsBot, netId);
+                else if (_networked)
+                    SpawnHero(p.Name, heroId, team, basePos + offset, false, p.IsBot, netId);
                 else
                     SpawnBot(p.Name, heroId, team, basePos + offset);
             }
         }
 
-        HeroCombat SpawnHero(string name, string heroId, TeamId team, Vector3 pos, bool player)
+        HeroCombat SpawnHero(string name, string heroId, TeamId team, Vector3 pos, bool player, bool bot = true, int netId = 0)
         {
             var go = UnitFactory.SpawnHero(transform, pos, heroId, team, player);
             var combat = go.GetComponent<HeroCombat>();
@@ -104,14 +150,25 @@ namespace Ashfold
                 ? new Vector3(-FoldMapBuilder.HalfLength, 1.35f, 0f)
                 : new Vector3(FoldMapBuilder.HalfLength, 1.35f, 0f);
 
-            _stats.Register(combat.Unit, name, heroId, team == TeamId.Dawn ? 0 : 1, player, !player);
+            if (_networked)
+            {
+                combat.ServerAuth = true;
+                combat.Unit.NetId = netId;
+                if (!player && combat.Motor != null)
+                    combat.Motor.enabled = false;
+                if (_net != null && netId > 0)
+                    _net.Register(netId, combat.Unit);
+            }
+
+            _stats.Register(combat.Unit, name, heroId, team == TeamId.Dawn ? 0 : 1, player, bot && !player);
 
             if (player)
             {
                 _hero = combat;
                 _spawn = combat.FountainPos;
                 _runtime.Player = combat.Unit;
-                combat.Unit.Killed += OnPlayerDown;
+                if (!_networked)
+                    combat.Unit.Killed += OnPlayerDown;
             }
 
             return combat;
@@ -133,10 +190,103 @@ namespace Ashfold
 
         void Update()
         {
-            if (!_playerDead || _hud == null)
+            if (_networked && _socketDrop && !_reconnecting && _runtime != null && !_runtime.MatchOver)
+                StartCoroutine(ReconnectRoutine());
+
+            if (_networked || !_playerDead || _hud == null)
                 return;
             _respawnLeft -= Time.deltaTime;
             _hud.SetDeathTimer(Mathf.Max(0f, _respawnLeft));
+        }
+
+        void HookSocket()
+        {
+            UnhookSocket();
+            var nk = GameSession.I != null ? GameSession.I.Nakama : null;
+            if (nk == null || nk.Socket == null)
+                return;
+            _hooked = nk.Socket;
+            _hooked.Closed += OnSocketClosed;
+            _hooked.ReceivedError += OnSocketError;
+        }
+
+        void UnhookSocket()
+        {
+            if (_hooked == null)
+                return;
+            _hooked.Closed -= OnSocketClosed;
+            _hooked.ReceivedError -= OnSocketError;
+            _hooked = null;
+        }
+
+        void OnSocketClosed()
+        {
+            if (!_reconnecting)
+                _socketDrop = true;
+        }
+
+        void OnSocketError(System.Exception _)
+        {
+            if (!_reconnecting)
+                _socketDrop = true;
+        }
+
+        IEnumerator ReconnectRoutine()
+        {
+            _reconnecting = true;
+            _socketDrop = false;
+            UnhookSocket();
+            var nk = GameSession.I.Nakama;
+            var matchId = nk != null && !string.IsNullOrEmpty(nk.MatchId)
+                ? nk.MatchId
+                : (GameSession.I.Match != null ? GameSession.I.Match.NakamaMatchId : "");
+            var left = 30f;
+            while (left > 0f && _runtime != null && !_runtime.MatchOver)
+            {
+                if (_hud != null)
+                    _hud.SetNetStatus(Loc.T("hud.reconnecting", Mathf.CeilToInt(left)), true);
+
+                if (nk != null)
+                {
+                    var close = nk.CloseSocketKeepMatchAsync();
+                    while (!close.IsCompleted)
+                        yield return null;
+
+                    var join = nk.JoinMatchByIdAsync(matchId);
+                    while (!join.IsCompleted)
+                        yield return null;
+                    if (!join.IsFaulted && nk.CurrentMatch != null)
+                    {
+                        HookSocket();
+                        _socketDrop = false;
+                        if (_hud != null)
+                            _hud.SetNetStatus("", false);
+                        _reconnecting = false;
+                        Debug.Log("[Ashfold] Reconnected to " + matchId);
+                        yield break;
+                    }
+                }
+
+                yield return new WaitForSeconds(2f);
+                left -= 2f;
+            }
+
+            if (_hud != null)
+                _hud.SetNetStatus(Loc.T("hud.rejoin_fail"), true);
+            _reconnecting = false;
+            if (nk != null)
+            {
+                var leave = nk.DisconnectRealtimeAsync();
+                while (!leave.IsCompleted)
+                    yield return null;
+            }
+            if (_runtime != null && !_runtime.MatchOver)
+                FinishMatch(false, false);
+        }
+
+        void OnDestroy()
+        {
+            UnhookSocket();
         }
 
         void OnPlayerDown(CombatUnit victim, CombatUnit killer)
@@ -159,8 +309,21 @@ namespace Ashfold
 
             yield return new WaitForSeconds(wait);
 
-            // Всегда снимаем lock, даже если матч уже кончился.
             _hero.ReviveAt(_spawn);
+            _playerDead = false;
+            if (_hud != null)
+                _hud.ClearDeathTimer();
+        }
+
+        public void ShowNetDeath(float seconds)
+        {
+            _playerDead = true;
+            if (_hud != null)
+                _hud.SetDeathTimer(Mathf.Max(0f, seconds));
+        }
+
+        public void ClearNetDeath()
+        {
             _playerDead = false;
             if (_hud != null)
                 _hud.ClearDeathTimer();
@@ -177,7 +340,22 @@ namespace Ashfold
         {
             if (_runtime.MatchOver)
                 return;
+            if (_networked && GameSession.I != null && GameSession.I.MatchClient != null)
+            {
+                GameSession.I.MatchClient.SendSurrender();
+                return;
+            }
             FinishMatch(false, true);
+        }
+
+        public void FinishFromServer(int winnerTeam, bool surrendered)
+        {
+            if (_runtime.MatchOver)
+                return;
+            var localTeam = 0;
+            if (GameSession.I != null && GameSession.I.Match != null && GameSession.I.Match.Local != null)
+                localTeam = GameSession.I.Match.Local.Team;
+            FinishMatch(winnerTeam == localTeam, surrendered);
         }
 
         void FinishMatch(bool victory, bool surrendered)

@@ -13,6 +13,7 @@ namespace Ashfold
         public float SkillCd;
         public readonly List<string> Items = new List<string>(6);
         public bool Recalling;
+        public bool ServerAuth;
         public float RecallT;
         public const float RecallDuration = 2.5f;
         public const int MaxItems = 6;
@@ -46,6 +47,12 @@ namespace Ashfold
             {
                 Motor.Stop();
                 Recalling = false;
+                return;
+            }
+
+            if (ServerAuth)
+            {
+                PredictLocal();
                 return;
             }
 
@@ -129,7 +136,10 @@ namespace Ashfold
             Recalling = true;
             RecallT = 0f;
             AttackTarget = null;
-            Motor.Stop();
+            if (Motor != null)
+                Motor.Stop();
+            if (ServerAuth && GameSession.I != null && GameSession.I.MatchClient != null)
+                GameSession.I.MatchClient.SendRecall();
         }
 
         public void CancelRecall()
@@ -178,6 +188,41 @@ namespace Ashfold
                 col.enabled = true;
         }
 
+        void PredictLocal()
+        {
+            SkillCd -= Time.deltaTime;
+            if (Unit.Stunned)
+            {
+                if (Motor != null)
+                    Motor.Stop();
+                Recalling = false;
+                return;
+            }
+            if (Recalling)
+            {
+                if (Motor != null)
+                    Motor.Stop();
+                RecallT += Time.deltaTime;
+                if (RecallT >= RecallDuration)
+                    CancelRecall();
+                return;
+            }
+            if (Motor == null)
+                return;
+            if (AttackTarget != null && !AttackTarget.IsAlive)
+                AttackTarget = null;
+            if (AttackTarget == null)
+                return;
+            var dist = Motor.DistTo(AttackTarget.transform.position);
+            if (dist > Def.AttackRange)
+                Motor.MoveTo(AttackTarget.transform.position);
+            else
+            {
+                Motor.Stop();
+                Motor.Face(AttackTarget.transform.position);
+            }
+        }
+
         public bool TryCastSkill()
         {
             if (!SkillReady)
@@ -185,27 +230,25 @@ namespace Ashfold
             CancelRecall();
             SkillCd = Def.SkillCooldown;
 
-            if (AttackTarget != null && AttackTarget.IsAlive)
+            if (AttackTarget != null && AttackTarget.IsAlive && Motor != null)
                 Motor.Face(AttackTarget.transform.position);
 
-            switch (Def.Id)
+            if (ServerAuth)
             {
-                case "bastion":
-                    CastCone();
-                    break;
-                case "vesper":
-                    Projectile.SpawnSkillshot(Unit, transform.forward, SkillPower, 22f, 0.7f, GameTheme.Crimson);
-                    break;
-                case "mira":
-                    CastMendNova();
-                    break;
+                PlaySkillFx();
+                if (GameSession.I != null && GameSession.I.MatchClient != null)
+                    GameSession.I.MatchClient.SendSkill(transform.eulerAngles.y);
             }
+            else
+                ApplySkillHits();
 
             return true;
         }
 
         public bool TryBuy(ItemDef item)
         {
+            if (ServerAuth)
+                return false;
             if (BattleRuntime.I == null)
                 return false;
             if (BattleRuntime.I.Gold < item.Cost)
@@ -255,6 +298,38 @@ namespace Ashfold
             Unit.MaxHp = newMax;
             Unit.Resist = Mathf.Clamp01(resist);
             Motor.Speed = Def.MoveSpeed * (1f + ExtraMove);
+        }
+
+        void ApplySkillHits()
+        {
+            switch (Def.Id)
+            {
+                case "bastion":
+                    CastCone();
+                    break;
+                case "vesper":
+                    Projectile.SpawnSkillshot(Unit, transform.forward, SkillPower, 22f, 0.7f, GameTheme.Crimson);
+                    break;
+                case "mira":
+                    CastMendNova();
+                    break;
+            }
+        }
+
+        void PlaySkillFx()
+        {
+            switch (Def.Id)
+            {
+                case "bastion":
+                    Flash(GameTheme.Gold);
+                    break;
+                case "vesper":
+                    Projectile.SpawnSkillshot(Unit, transform.forward, 0f, 22f, 0.7f, GameTheme.Crimson);
+                    break;
+                case "mira":
+                    Flash(GameTheme.Teal);
+                    break;
+            }
         }
 
         void CastMendNova()

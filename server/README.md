@@ -114,8 +114,10 @@ systemctl status caddy
 | Id | Назначение |
 |----|------------|
 | `ashfold_health` | проверка модуля |
-| `ashfold_create_debug_match` | создать матч `ashfold_3v3` вручную |
+| `ashfold_create_debug_match` | создать матч `ashfold_3v3` вручную (1 игрок → драфт) |
 | matchmaker | 2 игрока с `mode=casual_3v3` → `MatchCreate(ashfold_3v3)` |
+
+Op-коды комнаты: roster `11`, snapshot `20`, move `30`, skill `31`, draft pick/lock `32/33`, attack `34`, recall `36`, surrender `40`, map ping `50`. Тик 10 Гц. Leave не сразу в бота: слот Away, через 30 с — bot; rejoin по тому же `userId`.
 
 После смены Go на VPS:
 
@@ -128,4 +130,4 @@ docker compose logs -f nakama
 # в логе: "Ashfold registered ... matchmaker"
 ```
 
-Два клиента: PLAY → CASUAL 3v3. Ждут друг друга, затем Match Found (имена живых в драфте). SOLO — офлайн vs боты. Бой пока локальный (этап 5.4A).
+Два клиента: PLAY → CASUAL 3v3. Общая комната: драфт, герои (предикт, скилл, возврат), волны, турели, кристалл, лагеря леса, пинг по миникарте. Обрыв сокета → «переподключение» до 30 с. Results → Continue гасит матч. SOLO — офлайн vs боты. Скопируй на VPS весь `server/match/` (`ashfold.go`, `combat.go`, `world.go`).

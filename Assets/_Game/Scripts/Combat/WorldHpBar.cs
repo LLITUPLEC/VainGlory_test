@@ -1,52 +1,99 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Ashfold
 {
+    /// <summary>World-space UI, без z-fighting кубов (на телефоне заливка пропадала).</summary>
     public sealed class WorldHpBar : MonoBehaviour
     {
+        static Sprite _white;
+
         CombatUnit _unit;
-        Transform _fill;
+        Image _fill;
 
         public static WorldHpBar Attach(CombatUnit unit)
         {
-            var root = new GameObject("HpBar").transform;
-            root.SetParent(unit.transform, false);
-            root.localPosition = new Vector3(0f, unit.IsStructure ? 2.6f : 1.35f, 0f);
-            var bar = root.gameObject.AddComponent<WorldHpBar>();
+            var go = new GameObject("HpBar");
+            go.transform.SetParent(unit.transform, false);
+            go.transform.localPosition = new Vector3(0f, unit.IsStructure ? 2.6f : 1.55f, 0f);
+
+            var canvas = go.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = 80;
+
+            var rt = go.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(1.6f, 0.18f);
+            rt.localScale = Vector3.one;
+
+            var bar = go.AddComponent<WorldHpBar>();
             bar._unit = unit;
 
-            var bg = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            bg.name = "Bg";
-            bg.transform.SetParent(root, false);
-            bg.transform.localScale = new Vector3(1.4f, 0.12f, 0.12f);
-            Object.Destroy(bg.GetComponent<Collider>());
-            bg.GetComponent<Renderer>().sharedMaterial = RuntimeMat.Make(new Color(0.12f, 0.12f, 0.12f));
+            var sprite = WhiteSprite();
+            MakeImage(rt, "Bg", sprite, new Color(0.08f, 0.08f, 0.09f, 0.92f), Vector2.zero, Vector2.one);
 
-            var fill = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            fill.name = "Fill";
-            fill.transform.SetParent(root, false);
-            fill.transform.localScale = new Vector3(1.36f, 0.1f, 0.13f);
-            Object.Destroy(fill.GetComponent<Collider>());
-            fill.GetComponent<Renderer>().sharedMaterial = RuntimeMat.Make(unit.Team == TeamId.Dawn ? GameTheme.Teal : unit.Team == TeamId.Dusk ? GameTheme.Crimson : GameTheme.Gold);
-            bar._fill = fill.transform;
+            var fillImg = MakeImage(rt, "Fill", sprite, FillColor(unit), Vector2.zero, Vector2.one);
+            fillImg.type = Image.Type.Filled;
+            fillImg.fillMethod = Image.FillMethod.Horizontal;
+            fillImg.fillOrigin = (int)Image.OriginHorizontal.Left;
+            fillImg.fillAmount = 1f;
+            bar._fill = fillImg;
             return bar;
         }
 
         void LateUpdate()
         {
-            if (_unit == null)
+            if (_unit == null || _fill == null)
                 return;
-            if (!_unit.IsAlive)
+
+            var parent = transform.parent;
+            if (parent != null)
             {
-                _fill.localScale = new Vector3(0.02f, 0.1f, 0.13f);
-                return;
+                var ls = parent.lossyScale;
+                if (ls.x > 0.01f && ls.y > 0.01f && ls.z > 0.01f)
+                    transform.localScale = new Vector3(1f / ls.x, 1f / ls.y, 1f / ls.z);
             }
 
-            var t = _unit.Hp01;
-            _fill.localScale = new Vector3(1.36f * t, 0.1f, 0.13f);
-            _fill.localPosition = new Vector3(-0.68f * (1f - t), 0f, 0f);
-            if (Camera.main != null)
-                transform.rotation = Quaternion.LookRotation(transform.position - Camera.main.transform.position);
+            var cam = Camera.main;
+            if (cam != null)
+                transform.rotation = Quaternion.LookRotation(transform.position - cam.transform.position);
+
+            _fill.fillAmount = _unit.IsAlive ? _unit.Hp01 : 0f;
+        }
+
+        static Image MakeImage(Transform parent, string name, Sprite sprite, Color color, Vector2 aMin, Vector2 aMax)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = aMin;
+            rt.anchorMax = aMax;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            var img = go.GetComponent<Image>();
+            img.sprite = sprite;
+            img.color = color;
+            img.raycastTarget = false;
+            return img;
+        }
+
+        static Color FillColor(CombatUnit unit)
+        {
+            if (unit.Team == TeamId.Dawn)
+                return GameTheme.Teal;
+            if (unit.Team == TeamId.Dusk)
+                return GameTheme.Crimson;
+            return GameTheme.Gold;
+        }
+
+        static Sprite WhiteSprite()
+        {
+            if (_white != null)
+                return _white;
+            var tex = Texture2D.whiteTexture;
+            _white = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+            _white.name = "AshfoldWhite";
+            return _white;
         }
     }
 }

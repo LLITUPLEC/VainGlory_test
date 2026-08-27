@@ -1,5 +1,7 @@
+using System.Collections;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Ashfold
 {
@@ -10,6 +12,7 @@ namespace Ashfold
 
         public IAuthService Auth { get; private set; }
         public NakamaConnection Nakama { get; private set; }
+        public NakamaMatchClient MatchClient { get; private set; }
         public PlayerProfile Profile { get; private set; }
         public bool IsAuthenticated => Profile != null;
         public string ShowcaseHeroId = "bastion";
@@ -36,6 +39,7 @@ namespace Ashfold
 
             I = this;
             Nakama = new NakamaConnection();
+            MatchClient = gameObject.GetComponent<NakamaMatchClient>() ?? gameObject.AddComponent<NakamaMatchClient>();
             if (NakamaConfig.UseServer)
             {
                 Auth = new NakamaAuthService(Nakama);
@@ -45,6 +49,33 @@ namespace Ashfold
             {
                 Auth = new DevAuthService();
                 Debug.Log("[Ashfold] Auth = DevAuthService (set NakamaConfig.UseServer=true for VPS)");
+            }
+        }
+
+        void Start()
+        {
+            StartCoroutine(WatchSessionClaim());
+        }
+
+        IEnumerator WatchSessionClaim()
+        {
+            yield return new WaitForSeconds(3f);
+            while (true)
+            {
+                if (IsAuthenticated && NakamaConfig.UseServer && Nakama != null && Nakama.IsConnected && Auth != null)
+                {
+                    var device = Auth.DeviceId;
+                    var task = NakamaSessionClaim.TakenOverAsync(Nakama, device);
+                    while (!task.IsCompleted)
+                        yield return null;
+                    if (task.Status == TaskStatus.RanToCompletion && task.Result)
+                    {
+                        NakamaSessionClaim.MarkKicked();
+                        SignOut();
+                        SceneManager.LoadScene(AppScenes.Boot);
+                    }
+                }
+                yield return new WaitForSeconds(6f);
             }
         }
 

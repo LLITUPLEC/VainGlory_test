@@ -15,12 +15,22 @@ namespace Ashfold
 
         public ISocket Socket { get; private set; }
         public IMatch CurrentMatch { get; private set; }
+        public string MatchId { get; private set; }
         public string MatchmakerTicket { get; private set; }
         public IClient Client { get; private set; }
         public ISession Session { get; private set; }
         public bool IsConnected => Session != null && !Session.HasExpired(DateTime.UtcNow);
 
         public const long OpRoster = 11;
+        public const long OpSnapshot = 20;
+        public const long OpInputMove = 30;
+        public const long OpInputSkill = 31;
+        public const long OpDraftPick = 32;
+        public const long OpDraftLock = 33;
+        public const long OpInputAttack = 34;
+        public const long OpInputRecall = 36;
+        public const long OpSurrender = 40;
+        public const long OpMapPing = 50;
 
         public static bool HasStoredSession =>
             !string.IsNullOrEmpty(PlayerPrefs.GetString(KeyAuthToken, string.Empty));
@@ -172,10 +182,16 @@ namespace Ashfold
             if (Session == null)
                 throw new InvalidOperationException("Nakama session missing");
             if (Socket != null && Socket.IsConnected)
+            {
+                if (GameSession.I != null && GameSession.I.MatchClient != null)
+                    GameSession.I.MatchClient.Attach(Socket);
                 return;
-            await DisconnectRealtimeAsync();
+            }
+            await CloseSocketKeepMatchAsync();
             Socket = Client.NewSocket();
             await Socket.ConnectAsync(Session, true);
+            if (GameSession.I != null && GameSession.I.MatchClient != null)
+                GameSession.I.MatchClient.Attach(Socket);
             Debug.Log("[Ashfold] Realtime socket connected");
         }
 
@@ -213,15 +229,54 @@ namespace Ashfold
                 CurrentMatch = await Socket.JoinMatchAsync(matched);
             MatchmakerTicket = null;
             Debug.Log("[Ashfold] Joined match " + CurrentMatch.Id);
+            MatchId = CurrentMatch.Id;
+        }
+
+        public async Task JoinMatchByIdAsync(string matchId)
+        {
+            if (string.IsNullOrEmpty(matchId))
+                throw new InvalidOperationException("Match id missing");
+            if (Socket == null || !Socket.IsConnected)
+                await ConnectRealtimeAsync();
+            var name = GameSession.I != null && GameSession.I.Profile != null
+                ? GameSession.I.Profile.DisplayName
+                : "Player";
+            var meta = new Dictionary<string, string> { { "name", name } };
+            CurrentMatch = await Socket.JoinMatchAsync(matchId, meta);
+            MatchId = CurrentMatch.Id;
+            Debug.Log("[Ashfold] Rejoined match " + CurrentMatch.Id);
+        }
+
+        public async Task CloseSocketKeepMatchAsync()
+        {
+            if (GameSession.I != null && GameSession.I.MatchClient != null)
+                GameSession.I.MatchClient.Detach();
+            var socket = Socket;
+            Socket = null;
+            if (socket == null)
+                return;
+            try
+            {
+                if (socket.IsConnected)
+                    await socket.CloseAsync();
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Ashfold] Socket drop: " + e.Message);
+            }
         }
 
         public async Task DisconnectRealtimeAsync()
         {
+            if (GameSession.I != null && GameSession.I.MatchClient != null)
+                GameSession.I.MatchClient.Detach();
             var ticket = MatchmakerTicket;
             var match = CurrentMatch;
+            var matchId = match != null ? match.Id : MatchId;
             var socket = Socket;
             MatchmakerTicket = null;
             CurrentMatch = null;
+            MatchId = null;
             Socket = null;
             if (socket == null)
                 return;
@@ -231,8 +286,8 @@ namespace Ashfold
                 {
                     if (!string.IsNullOrEmpty(ticket))
                         await socket.RemoveMatchmakerAsync(ticket);
-                    if (match != null)
-                        await socket.LeaveMatchAsync(match.Id);
+                    if (!string.IsNullOrEmpty(matchId))
+                        await socket.LeaveMatchAsync(matchId);
                     await socket.CloseAsync();
                 }
             }
