@@ -116,11 +116,36 @@ namespace Ashfold
         {
             switch (role)
             {
-                case HeroRole.Tank: return "TANK";
-                case HeroRole.Carry: return "CARRY";
-                case HeroRole.Support: return "SUPPORT";
+                case HeroRole.Tank: return Loc.T("role.tank");
+                case HeroRole.Carry: return Loc.T("role.carry");
+                case HeroRole.Support: return Loc.T("role.support");
                 default: return role.ToString().ToUpperInvariant();
             }
+        }
+
+        public static string HeroTagline(HeroDef hero)
+        {
+            return Loc.T("hero." + hero.Id + ".tagline");
+        }
+
+        public static string HeroSkill(HeroDef hero)
+        {
+            return Loc.T("hero." + hero.Id + ".skill");
+        }
+
+        public static string ItemName(ItemDef item)
+        {
+            return Loc.T("item." + item.Id + ".name");
+        }
+
+        public static string ItemEffect(ItemDef item)
+        {
+            return Loc.T("item." + item.Id + ".effect");
+        }
+
+        public static string ItemBranch(ItemDef item)
+        {
+            return Loc.T("item.branch." + item.Branch.ToLowerInvariant());
         }
     }
 }

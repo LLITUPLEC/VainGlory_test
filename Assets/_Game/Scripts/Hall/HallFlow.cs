@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -9,6 +10,8 @@ namespace Ashfold
         Text _showcaseName;
         Image _showcaseBody;
         Text _stage;
+        Text _profileLabel;
+        Text _essenceLabel;
         MatchPrepFlow _prep;
         GameObject _toast;
 
@@ -23,7 +26,9 @@ namespace Ashfold
         void Start()
         {
             Build();
-            RefreshShowcase();
+            RefreshShowcase(false);
+            if (Loc.ConsumeReopenAccount())
+                HallAccount.Open(this, RefreshProfile);
         }
 
         void Build()
@@ -38,34 +43,50 @@ namespace Ashfold
 
             var profile = GameSession.I != null && GameSession.I.IsAuthenticated
                 ? GameSession.I.Profile
-                : new PlayerProfile { DisplayName = "Guest", Level = 1 };
+                : new PlayerProfile { DisplayName = Loc.T("hall.guest"), Level = 1 };
 
             var topL = UiFactory.Box(root, new Vector2(0.02f, 0.88f), new Vector2(0.32f, 0.98f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Profile");
-            var pLabel = UiFactory.Label(topL.transform, profile.DisplayName.ToUpperInvariant() + "   LVL " + profile.Level, 20, GameTheme.Text, TextAnchor.MiddleLeft);
-            UiFactory.Stretch(pLabel.rectTransform, 18, 4);
+            _profileLabel = UiFactory.Label(topL.transform, ProfileLine(profile), 20, GameTheme.Text, TextAnchor.MiddleLeft);
+            UiFactory.Stretch(_profileLabel.rectTransform, 18, 4);
 
             var topR = UiFactory.Box(root, new Vector2(0.72f, 0.88f), new Vector2(0.98f, 0.98f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Essence");
-            var eLabel = UiFactory.Label(topR.transform, "ESSENCE  " + profile.Essence, 20, GameTheme.Gold, TextAnchor.MiddleRight);
-            UiFactory.Stretch(eLabel.rectTransform, 18, 4);
+            _essenceLabel = UiFactory.Label(topR.transform, Loc.T("hall.essence", profile.Essence), 20, GameTheme.Gold, TextAnchor.MiddleRight);
+            UiFactory.Stretch(_essenceLabel.rectTransform, 18, 4);
 
-            var play = UiFactory.Button(root, "PLAY", () => _prep.OpenModeSelect(), GameTheme.Gold, GameTheme.Bg);
+            var play = UiFactory.Button(root, Loc.T("hall.play"), () => _prep.OpenModeSelect(), GameTheme.Gold, GameTheme.Bg);
             UiFactory.SetAnchors(play.GetComponent<RectTransform>(), new Vector2(0.38f, 0.10f), new Vector2(0.62f, 0.20f), Vector2.zero, Vector2.zero);
             play.GetComponentInChildren<Text>().fontSize = 36;
+            play.interactable = false;
+            StartCoroutine(EnablePlayAfterPointerUp(play));
 
-            BuildNav(root, 0.04f, "HEROES", () => HallCatalog.OpenHeroes(RefreshShowcase));
-            BuildNav(root, 0.22f, "SHOP", HallCatalog.OpenShop);
-            BuildNav(root, 0.78f, "FRIENDS", () => ShowToast("Friends — этап 7 (Nakama)"));
-            BuildNav(root, 0.90f, "QUESTS", () => ShowToast("Quests — позже"));
+            BuildNav(root, 0.04f, Loc.T("hall.heroes"), () => HallCatalog.OpenHeroes(RefreshShowcase));
+            BuildNav(root, 0.22f, Loc.T("hall.shop"), HallCatalog.OpenShop);
+            BuildNav(root, 0.78f, Loc.T("hall.friends"), () => ShowToast(Loc.T("hall.friends_toast")));
+            BuildNav(root, 0.90f, Loc.T("hall.account"), () => HallAccount.Open(this, RefreshProfile));
 
             var stageBox = UiFactory.Box(root, new Vector2(0.32f, 0.02f), new Vector2(0.68f, 0.07f), Vector2.zero, Vector2.zero, Color.clear, "Stage");
-            _stage = UiFactory.Label(stageBox.transform, "STAGE 2.1  ·  HALL", 16, GameTheme.GoldDim, TextAnchor.MiddleCenter);
+            _stage = UiFactory.Label(stageBox.transform, NakamaConfig.UseServer ? Loc.T("hall.stage_nakama") : Loc.T("hall.stage_dev"), 16, GameTheme.GoldDim, TextAnchor.MiddleCenter);
 
             _toast = UiFactory.Box(root, new Vector2(0.25f, 0.40f), new Vector2(0.75f, 0.55f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Toast").gameObject;
             UiFactory.Label(_toast.transform, "", 22, GameTheme.Text, TextAnchor.MiddleCenter);
             _toast.SetActive(false);
         }
 
+        IEnumerator EnablePlayAfterPointerUp(Button play)
+        {
+            while (BootFlow.PointerHeld())
+                yield return null;
+            yield return null;
+            if (play != null)
+                play.interactable = true;
+        }
+
         void RefreshShowcase()
+        {
+            RefreshShowcase(true);
+        }
+
+        void RefreshShowcase(bool persist)
         {
             var id = GameSession.I != null ? GameSession.I.ShowcaseHeroId : "bastion";
             var hero = GameContent.GetHero(id);
@@ -73,6 +94,32 @@ namespace Ashfold
                 _showcaseBody.color = GameContent.HeroColor(hero.Id);
             if (_showcaseName != null)
                 _showcaseName.text = hero.DisplayName.ToUpperInvariant() + "\n" + GameContent.RoleLabel(hero.Role);
+            if (persist && GameSession.I != null)
+                StartCoroutine(SaveProgressSoon());
+        }
+
+        void RefreshProfile()
+        {
+            var profile = GameSession.I != null ? GameSession.I.Profile : null;
+            if (profile == null)
+                return;
+            if (_profileLabel != null)
+                _profileLabel.text = ProfileLine(profile);
+            if (_essenceLabel != null)
+                _essenceLabel.text = Loc.T("hall.essence", profile.Essence);
+        }
+
+        static string ProfileLine(PlayerProfile profile)
+        {
+            var mail = profile.HasEmail ? Loc.T("hall.saved") : "";
+            return Loc.T("hall.profile", profile.DisplayName.ToUpperInvariant(), profile.Level) + mail;
+        }
+
+        System.Collections.IEnumerator SaveProgressSoon()
+        {
+            var task = GameSession.I.SaveProgressAsync();
+            while (!task.IsCompleted)
+                yield return null;
         }
 
         static void BuildNav(Transform root, float x, string title, UnityEngine.Events.UnityAction action)

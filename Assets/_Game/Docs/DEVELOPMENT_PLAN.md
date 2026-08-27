@@ -12,6 +12,13 @@
 
 Каждый этап заканчивается **проверкой**. Не перескакивать через непройденный этап.
 
+### Где мы сейчас (2026-08-27)
+
+Пройдено: **этап 0**, офлайн **2–4**, полировка **6.1–6.2** и **6.6** (en/ru), сервер **5.0–5.3**, аккаунт **1.1–1.8**.  
+**Только что:** очередь Nakama (2 игрока → матч `ashfold_3v3`), SOLO vs боты. Драфт пиков ещё не общий.
+
+**Дальше:** пересобрать плагин на VPS, проверить двумя клиентами. Затем **5.4A** — Go MatchLoop (движение/HP).
+
 ---
 
 ## Поток клиента (как в Vainglory)
@@ -53,16 +60,17 @@ VPN/прокси ради Photon возможны для разработчик�
 | ID | Что сделать | Как проверить |
 |---|---|---|
 | **1.1** | Интерфейс `IAuthService` (Dev есть) | ✅ |
-| **1.2** | Nakama+Postgres на VPS (`server/`) | ✅ `backend.so`, ashfold_health / ashfold_3v3 |
-| **1.3** | Device login (`NakamaAuthService`) | В работе: `UseServer=true` → Boot → лог NAKAMA |
-| **1.4** | Сессия на диск, автологин | Перезапуск без экрана логина |
-| **1.5** | Профиль в Hall | Имя с сервера |
-| **1.6** | Ошибка сети на Splash | Retry (частично: сообщение Auth failed) |
-| **1.7** | Storage: открытые герои (3) | Каталог с сервера |
+| **1.2** | Nakama+Postgres на VPS (`server/`) | ✅ новый VPS: `~/ashfold`, `backend.so`, Caddy на `:443` |
+| **1.3** | Device login (`NakamaAuthService`) | ✅ Guest → `Nakama authenticated` + `ashfold_health` |
+| **1.4** | Сессия на диск, автологин | ✅ токен + refresh; Boot → Restore / silent device |
+| **1.5** | Профиль в Hall | ✅ имя/lvl/Essence с GetAccount + Storage; метка SAVED если email |
+| **1.6** | Ошибка сети на Splash | ✅ Retry + EMAIL / GUEST, понятные ошибки |
+| **1.7** | Storage: открытые герои (3) | ✅ collection `progress` / key `meta`; v1 все трое открыты |
+| **1.8** | Email + пароль (восстановление) | ✅ Hall → ACCOUNT → Link; новый девайс: Boot → EMAIL |
 
-**Как подключить клиент к VPS:** в `NakamaConfig.cs` — `UseServer=true`,  
-`Scheme=https`, `Host=api.prokrust-play.ru`, `Port=443`, ServerKey как в compose  
-(тот же reverse-proxy, что у старого проекта). Внутри LAN можно `http://192.168.9.24:7350`.
+**Клиент → VPS:** `NakamaConfig.cs` — `UseServer=true`, `https` / `api.prokrust-play.ru` / `443`, ServerKey как в compose.  
+Прокси: **Caddy** (`127.0.0.1:7350`), не NPM и не LAN `192.168.9.24`. Unity HTTP на IP:7350 блокирует insecure.  
+Подробности деплоя: `server/README.md`.
 
 ---
 
@@ -89,7 +97,7 @@ VPN/прокси ради Photon возможны для разработчик�
 | ID | Что | Статус |
 |---|---|---|
 | **4.1–4.4** | Victory/Defeat, таблица, Essence | Сделано |
-| **4.5** | Запись в Nakama Storage | После 1.x |
+| **4.5** | Запись в Nakama Storage | ✅ Essence после Results → `progress/meta` |
 
 ---
 
@@ -100,9 +108,9 @@ VPN/прокси ради Photon возможны для разработчик�
 | ID | Что сделать | Как проверить |
 |---|---|---|
 | **5.0** | Путь **A** (Go) зафиксирован | ✅ `server/` |
-| **5.1** | Docker Compose: Nakama + Postgres + Go plugin | ✅ каркас; на VPS: `docker compose up -d --build` |
-| **5.2** | Unity Nakama SDK, логин device | Session в Boot |
-| **5.3** | Matchmaker 3v3 (или room create для теста 1v1) | Два клиента в одной комнате |
+| **5.1** | Docker Compose: Nakama + Postgres + Go plugin | ✅ на VPS: `./build-plugin.sh` + `docker compose up -d` (не `--build`) |
+| **5.2** | Unity Nakama SDK, логин device | ✅ совпадает с 1.3 |
+| **5.3** | Matchmaker 3v3 (или room create для теста 1v1) | ✅ очередь на 2 игрока → `ashfold_3v3`; SOLO = боты. Пики героев ещё не синхронны |
 | **5.4A** | Go `MatchLoop`: движение, HP, автоатака (тик 10 Гц) | Одинаковый last-hit у обоих |
 | **5.5A** | Крипы + турель + кристалл на сервере | Победа по кристаллу с сервера |
 | **5.6A** | Клиент Unity = отображение снапшотов + локальный предикт героя | Нет «двойной истины» |
@@ -126,6 +134,7 @@ VPN/прокси ради Photon возможны для разработчик�
 | **6.3** | Пинг по карте | Союзник видит |
 | **6.4** | Баланс 10 каток | Нет авто-вина одной роли |
 | **6.5** | Туториал 60 с | Первый вход |
+| **6.6** | Локализация UI: en/ru, глобус в Hall → ACCOUNT | ✅ `Loc` + PlayerPrefs; смена языка пересобирает сцену (сессия DDOL). Первый запуск: язык ОС. Проверка: ACCOUNT → глобус → Русский → кнопки Hall на русском |
 
 ---
 
@@ -148,11 +157,14 @@ VPN/прокси ради Photon возможны для разработчик�
 
 ---
 
-## Что нужно для старта этапа 5 (путь A)
+## Инфра для этапа 5 (путь A) — стоит
 
-1. VPS с Docker (уже есть / планируется).
-2. Репозиторий Nakama (GitHub `heroiclabs/nakama`) — **не** Photon dashboard.
-3. Unity package: `com.heroiclabs.nakama` (OpenUPM / Git).
-4. Go runtime module в проекте (папка `nakama/modules` или отдельный repo).
+1. ✅ VPS Ubuntu 26.04, Docker + Compose, UFW (`80`/`443`).
+2. ✅ Образ `heroiclabs/nakama:3.22.0` + Postgres 12 в compose.
+3. ✅ Unity package `com.heroiclabs.nakama-unity`.
+4. ✅ Go-модуль: `server/` → `modules/backend.so` (RPC, matchmaker → `ashfold_3v3`, roster). После правок Go: `./build-plugin.sh` + `docker compose restart nakama`.
+5. ✅ Публичный вход: A-запись `api.prokrust-play.ru` → `46.173.17.51`, Caddy + Let’s Encrypt.
 
-FishNet (путь B): GitHub `FirstGearGames/FishNet` или OpenUPM — тоже без иностранного CCU-дашборда.
+До **5.4A** (Go бой) очередь Nakama на двоих уже в клиенте; на VPS нужна пересборка плагина.
+
+FishNet (путь B): GitHub `FirstGearGames/FishNet` или OpenUPM — запас, без Photon.

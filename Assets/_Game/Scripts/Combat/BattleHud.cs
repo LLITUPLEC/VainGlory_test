@@ -48,7 +48,7 @@ namespace Ashfold
             if (_deathPanel != null)
                 _deathPanel.SetActive(true);
             if (_death != null)
-                _death.text = "RESPAWN  " + Mathf.CeilToInt(seconds);
+                _death.text = Loc.T("hud.respawn", Mathf.CeilToInt(seconds));
         }
 
         public void ClearDeathTimer()
@@ -76,28 +76,28 @@ namespace Ashfold
             UiFactory.Stretch(_kda.rectTransform, 12, 0);
 
             var items = UiFactory.Box(root, new Vector2(0.78f, 0.76f), new Vector2(0.98f, 0.84f), Vector2.zero, Vector2.zero, GameTheme.BgPanelSoft, "Items");
-            _items = UiFactory.Label(items.transform, "ITEMS —", 14, GameTheme.TextMuted, TextAnchor.MiddleRight, FontStyle.Normal, true);
+            _items = UiFactory.Label(items.transform, Loc.T("hud.items_empty"), 14, GameTheme.TextMuted, TextAnchor.MiddleRight, FontStyle.Normal, true);
             UiFactory.Stretch(_items.rectTransform, 10, 2);
 
             MinimapView.Create(root);
 
             var bar = UiFactory.Box(root, new Vector2(0.22f, 0.03f), new Vector2(0.50f, 0.14f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Hint");
-            _hint = UiFactory.Label(bar.transform, "LMB attack  ·  Q  ·  B shop  ·  R recall", 15, GameTheme.TextMuted, TextAnchor.MiddleCenter, FontStyle.Normal, true);
+            _hint = UiFactory.Label(bar.transform, Loc.T("hud.hint"), 15, GameTheme.TextMuted, TextAnchor.MiddleCenter, FontStyle.Normal, true);
 
             _skillBtn = UiFactory.Button(root, "Q", OnSkill, GameTheme.Gold, GameTheme.Bg);
             UiFactory.SetAnchors(_skillBtn.GetComponent<RectTransform>(), new Vector2(0.52f, 0.03f), new Vector2(0.64f, 0.14f), Vector2.zero, Vector2.zero);
             _skill = _skillBtn.GetComponentInChildren<Text>();
             _skill.fontSize = 18;
 
-            var shop = UiFactory.Button(root, "SHOP", OnShop, GameTheme.BgPanelSoft, GameTheme.Gold);
+            var shop = UiFactory.Button(root, Loc.T("hud.shop"), OnShop, GameTheme.BgPanelSoft, GameTheme.Gold);
             UiFactory.SetAnchors(shop.GetComponent<RectTransform>(), new Vector2(0.66f, 0.03f), new Vector2(0.78f, 0.14f), Vector2.zero, Vector2.zero);
             shop.GetComponentInChildren<Text>().fontSize = 16;
 
-            var recall = UiFactory.Button(root, "RECALL", OnRecall, GameTheme.BgPanelSoft, GameTheme.Teal);
+            var recall = UiFactory.Button(root, Loc.T("hud.recall"), OnRecall, GameTheme.BgPanelSoft, GameTheme.Teal);
             UiFactory.SetAnchors(recall.GetComponent<RectTransform>(), new Vector2(0.80f, 0.03f), new Vector2(0.92f, 0.14f), Vector2.zero, Vector2.zero);
             recall.GetComponentInChildren<Text>().fontSize = 16;
 
-            _surrender = UiFactory.Button(root, "SURRENDER", () => { }, GameTheme.Crimson, GameTheme.Text);
+            _surrender = UiFactory.Button(root, Loc.T("hud.surrender"), () => { }, GameTheme.Crimson, GameTheme.Text);
             UiFactory.SetAnchors(_surrender.GetComponent<RectTransform>(), new Vector2(0.02f, 0.03f), new Vector2(0.16f, 0.14f), Vector2.zero, Vector2.zero);
             _surrender.GetComponentInChildren<Text>().fontSize = 16;
 
@@ -114,11 +114,11 @@ namespace Ashfold
             recBg.gameObject.SetActive(false);
 
             _deathPanel = UiFactory.Box(root, new Vector2(0.35f, 0.42f), new Vector2(0.65f, 0.58f), Vector2.zero, Vector2.zero, GameTheme.Hex(0x000000, 0.65f), "Death").gameObject;
-            _death = UiFactory.Label(_deathPanel.transform, "RESPAWN  5", 36, GameTheme.Crimson, TextAnchor.MiddleCenter, FontStyle.Bold);
+            _death = UiFactory.Label(_deathPanel.transform, Loc.T("hud.respawn", 5), 32, GameTheme.Crimson, TextAnchor.MiddleCenter, FontStyle.Bold, true);
             _deathPanel.SetActive(false);
 
             var stage = UiFactory.Box(root, new Vector2(0.32f, 0.94f), new Vector2(0.68f, 0.99f), Vector2.zero, Vector2.zero, Color.clear, "St");
-            UiFactory.Label(stage.transform, "STAGE 6.1–6.2  ·  BRUSH / MINIMAP", 14, GameTheme.GoldDim, TextAnchor.MiddleCenter);
+            UiFactory.Label(stage.transform, Loc.T("hud.stage"), 14, GameTheme.GoldDim, TextAnchor.MiddleCenter);
         }
 
         void OnSkill()
@@ -133,7 +133,7 @@ namespace Ashfold
                 return;
             if (!FoldMapBuilder.InFountain(Combat.transform.position, Player.Team))
             {
-                _hint.text = "Shop only at fountain  ·  R to recall";
+                _hint.text = Loc.T("hud.shop_fountain");
                 return;
             }
             FountainShop.Open(Combat);
@@ -151,7 +151,7 @@ namespace Ashfold
                 return;
             var def = Combat.Def;
             if (_dead)
-                _hp.text = def.DisplayName.ToUpperInvariant() + "\nDEAD";
+                _hp.text = def.DisplayName.ToUpperInvariant() + "\n" + Loc.T("hud.dead");
             else
                 _hp.text = def.DisplayName.ToUpperInvariant() + "\n" + Mathf.CeilToInt(Player.Hp) + " / " + Mathf.CeilToInt(Player.MaxHp);
 
@@ -168,7 +168,7 @@ namespace Ashfold
             }
 
             if (Combat.Items.Count == 0)
-                _items.text = "ITEMS —";
+                _items.text = Loc.T("hud.items_empty");
             else
             {
                 var names = "";
@@ -176,19 +176,20 @@ namespace Ashfold
                 {
                     var item = GameContent.GetItem(id);
                     if (item != null)
-                        names += item.DisplayName + "  ";
+                        names += GameContent.ItemName(item) + "  ";
                 }
                 _items.text = names;
             }
 
+            var skillName = GameContent.HeroSkill(def);
             if (Combat.SkillCd > 0f || _dead)
             {
-                _skill.text = _dead ? "Q\n—" : "Q  " + Combat.SkillCd.ToString("0.0") + "\n" + def.SkillName;
+                _skill.text = _dead ? "Q\n—" : "Q  " + Combat.SkillCd.ToString("0.0") + "\n" + skillName;
                 _skillBtn.interactable = false;
             }
             else
             {
-                _skill.text = "Q\n" + def.SkillName;
+                _skill.text = "Q\n" + skillName;
                 _skillBtn.interactable = true;
             }
 
@@ -200,10 +201,10 @@ namespace Ashfold
                 {
                     var t = Mathf.Clamp01(Combat.RecallT / HeroCombat.RecallDuration);
                     _recallBar.rectTransform.anchorMax = new Vector2(t, 1f);
-                    _hint.text = "Recalling…  " + (HeroCombat.RecallDuration - Combat.RecallT).ToString("0.0") + "s";
+                    _hint.text = Loc.T("hud.recalling", HeroCombat.RecallDuration - Combat.RecallT);
                 }
                 else if (!_dead && FoldMapBuilder.InFountain(Combat.transform.position, Player.Team))
-                    _hint.text = "FOUNTAIN  ·  B shop  ·  Q skill";
+                    _hint.text = Loc.T("hud.fountain");
             }
         }
     }

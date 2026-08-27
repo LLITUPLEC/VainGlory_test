@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace Ashfold
@@ -50,6 +51,25 @@ namespace Ashfold
         public void SetProfile(PlayerProfile profile)
         {
             Profile = profile;
+        }
+
+        public Task SaveProgressAsync()
+        {
+            if (Auth == null || Profile == null)
+                return Task.CompletedTask;
+            return Auth.SaveProgressAsync(Profile);
+        }
+
+        public void SignOut()
+        {
+            if (Nakama != null)
+            {
+                var _ = Nakama.DisconnectRealtimeAsync();
+            }
+            Auth?.SignOutLocal();
+            Profile = null;
+            Match = null;
+            LastResult = null;
         }
     }
 }

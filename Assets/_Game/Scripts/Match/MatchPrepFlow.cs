@@ -1,4 +1,7 @@
 using System.Collections;
+using System.Collections.Generic;
+using System.Text;
+using Nakama;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -22,6 +25,9 @@ namespace Ashfold
         string _pickedId;
         Coroutine _routine;
         bool _locked;
+        bool _queueCancelled;
+        IMatchmakerMatched _matched;
+        NakamaRosterDto _roster;
 
         public void OpenModeSelect()
         {
@@ -31,25 +37,235 @@ namespace Ashfold
             UiFactory.Panel(canvas.transform, GameTheme.Hex(0x000000, 0.78f), "Dim");
 
             var sheet = UiFactory.Box(canvas.transform, new Vector2(0.28f, 0.22f), new Vector2(0.72f, 0.78f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Sheet");
-            UiFactory.Label(sheet.transform, "SELECT MODE", 28, GameTheme.Gold, TextAnchor.UpperCenter, FontStyle.Bold);
+            UiFactory.Label(sheet.transform, Loc.T("mode.title"), 28, GameTheme.Gold, TextAnchor.UpperCenter, FontStyle.Bold);
 
-            var casual = UiFactory.Button(sheet.transform, "CASUAL  3v3", StartQueue, GameTheme.Gold, GameTheme.Bg);
-            UiFactory.SetAnchors(casual.GetComponent<RectTransform>(), new Vector2(0.1f, 0.42f), new Vector2(0.9f, 0.68f), Vector2.zero, Vector2.zero);
-            casual.GetComponentInChildren<Text>().fontSize = 32;
+            var casual = UiFactory.Button(sheet.transform, Loc.T("mode.casual_btn"), StartCasualQueue, GameTheme.Gold, GameTheme.Bg);
+            if (NakamaConfig.UseServer)
+            {
+                UiFactory.SetAnchors(casual.GetComponent<RectTransform>(), new Vector2(0.1f, 0.54f), new Vector2(0.9f, 0.74f), Vector2.zero, Vector2.zero);
+                casual.GetComponentInChildren<Text>().fontSize = 28;
+                var solo = UiFactory.Button(sheet.transform, Loc.T("mode.solo_btn"), StartLocalQueue, GameTheme.BgPanelSoft, GameTheme.Text);
+                UiFactory.SetAnchors(solo.GetComponent<RectTransform>(), new Vector2(0.1f, 0.36f), new Vector2(0.9f, 0.50f), Vector2.zero, Vector2.zero);
+                solo.GetComponentInChildren<Text>().fontSize = 22;
+            }
+            else
+            {
+                UiFactory.SetAnchors(casual.GetComponent<RectTransform>(), new Vector2(0.1f, 0.42f), new Vector2(0.9f, 0.68f), Vector2.zero, Vector2.zero);
+                casual.GetComponentInChildren<Text>().fontSize = 32;
+            }
 
-            var hint = UiFactory.Box(sheet.transform, new Vector2(0.08f, 0.22f), new Vector2(0.92f, 0.40f), Vector2.zero, Vector2.zero, Color.clear, "Hint");
-            UiFactory.Label(hint.transform, "Lane + jungle  ·  one turret  ·  crystal\nQueue is local until Nakama (5.8)", 18, GameTheme.TextMuted, TextAnchor.MiddleCenter, FontStyle.Normal, true);
+            var hint = UiFactory.Box(sheet.transform, new Vector2(0.08f, 0.20f), new Vector2(0.92f, 0.34f), Vector2.zero, Vector2.zero, Color.clear, "Hint");
+            UiFactory.Label(hint.transform, Loc.T(NakamaConfig.UseServer ? "mode.hint_nakama" : "mode.hint"), 16, GameTheme.TextMuted, TextAnchor.MiddleCenter, FontStyle.Normal, true);
 
-            var cancel = UiFactory.Button(sheet.transform, "BACK", CloseOverlay, GameTheme.BgPanelSoft, GameTheme.Text);
+            var cancel = UiFactory.Button(sheet.transform, Loc.T("mode.back"), CloseOverlay, GameTheme.BgPanelSoft, GameTheme.Text);
             UiFactory.SetAnchors(cancel.GetComponent<RectTransform>(), new Vector2(0.25f, 0.06f), new Vector2(0.75f, 0.18f), Vector2.zero, Vector2.zero);
             cancel.GetComponentInChildren<Text>().fontSize = 20;
         }
 
-        void StartQueue()
+        void StartCasualQueue()
+        {
+            if (NakamaConfig.UseServer)
+                StartNakamaQueue();
+            else
+                StartLocalQueue();
+        }
+
+        void StartLocalQueue()
         {
             CloseOverlay();
             BuildQueue();
-            _routine = StartCoroutine(QueueRoutine());
+            _routine = StartCoroutine(LocalQueueRoutine());
+        }
+
+        void StartNakamaQueue()
+        {
+            CloseOverlay();
+            BuildQueue();
+            _routine = StartCoroutine(NakamaQueueRoutine());
+        }
+
+        IEnumerator LocalQueueRoutine()
+        {
+            var t = 0f;
+            while (t < QueueSeconds)
+            {
+                t += Time.deltaTime;
+                var sec = Mathf.FloorToInt(t);
+                if (_status != null)
+                    _status.text = Loc.T("queue.filling", sec);
+                yield return null;
+            }
+
+            GameSession.I.Match = CreateLocalMatch();
+            ShowMatchFound();
+            yield return new WaitForSeconds(FoundSeconds);
+            OpenDraft();
+        }
+
+        IEnumerator NakamaQueueRoutine()
+        {
+            _queueCancelled = false;
+            _matched = null;
+            _roster = null;
+            var nk = GameSession.I.Nakama;
+            if (_status != null)
+                _status.text = Loc.T("queue.connecting");
+
+            var connect = nk.ConnectRealtimeAsync();
+            while (!connect.IsCompleted)
+                yield return null;
+            if (_queueCancelled)
+                yield break;
+            if (connect.IsFaulted)
+            {
+                ShowQueueError(connect.Exception);
+                yield break;
+            }
+
+            nk.Socket.ReceivedMatchmakerMatched += OnMatched;
+            nk.Socket.ReceivedMatchState += OnMatchState;
+
+            var add = nk.AddMatchmakerAsync();
+            while (!add.IsCompleted)
+                yield return null;
+            if (_queueCancelled)
+            {
+                UnhookSocket();
+                yield break;
+            }
+            if (add.IsFaulted)
+            {
+                UnhookSocket();
+                ShowQueueError(add.Exception);
+                yield break;
+            }
+
+            var t = 0f;
+            while (_matched == null && !_queueCancelled)
+            {
+                t += Time.deltaTime;
+                if (_status != null)
+                    _status.text = Loc.T("queue.waiting", Mathf.FloorToInt(t));
+                yield return null;
+            }
+
+            if (_queueCancelled)
+            {
+                UnhookSocket();
+                yield break;
+            }
+
+            if (_status != null)
+                _status.text = Loc.T("queue.joining");
+            var join = nk.JoinMatchedAsync(_matched);
+            while (!join.IsCompleted)
+                yield return null;
+            if (_queueCancelled)
+            {
+                UnhookSocket();
+                yield break;
+            }
+            if (join.IsFaulted)
+            {
+                UnhookSocket();
+                ShowQueueError(join.Exception);
+                yield break;
+            }
+
+            var wait = 0f;
+            while (_roster == null && wait < 8f && !_queueCancelled)
+            {
+                wait += Time.deltaTime;
+                yield return null;
+            }
+
+            UnhookSocket();
+            if (_queueCancelled)
+                yield break;
+
+            var localId = GameSession.I.Profile != null ? GameSession.I.Profile.UserId : "";
+            var roster = _roster ?? FallbackRoster(nk.CurrentMatch, localId);
+            GameSession.I.Match = MatchRoster.FromNakama(roster, localId, nk.CurrentMatch != null ? nk.CurrentMatch.Id : "");
+            Debug.Log("[Ashfold] Match roster humans=" + (roster.players != null ? roster.players.Length : 0));
+
+            ShowMatchFound();
+            yield return new WaitForSeconds(FoundSeconds);
+            OpenDraft();
+        }
+
+        void OnMatched(IMatchmakerMatched matched)
+        {
+            _matched = matched;
+        }
+
+        void OnMatchState(IMatchState state)
+        {
+            if (state == null || state.OpCode != NakamaConnection.OpRoster || state.State == null)
+                return;
+            try
+            {
+                var json = Encoding.UTF8.GetString(state.State);
+                _roster = JsonUtility.FromJson<NakamaRosterDto>(json);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[Ashfold] Roster parse: " + e.Message);
+            }
+        }
+
+        void UnhookSocket()
+        {
+            var socket = GameSession.I != null && GameSession.I.Nakama != null
+                ? GameSession.I.Nakama.Socket
+                : null;
+            if (socket == null)
+                return;
+            socket.ReceivedMatchmakerMatched -= OnMatched;
+            socket.ReceivedMatchState -= OnMatchState;
+        }
+
+        void ShowQueueError(System.AggregateException ex)
+        {
+            var msg = ex != null && ex.GetBaseException() != null ? ex.GetBaseException().Message : "queue failed";
+            Debug.LogError("[Ashfold] Queue failed: " + msg);
+            if (_status != null)
+                _status.text = Loc.T("queue.failed");
+        }
+
+        static NakamaRosterDto FallbackRoster(IMatch match, string localId)
+        {
+            var list = new List<NakamaRosterPlayer>();
+            var seen = new HashSet<string>();
+            if (match != null)
+            {
+                if (match.Self != null && seen.Add(match.Self.UserId))
+                    list.Add(PresencePlayer(match.Self, list.Count));
+                if (match.Presences != null)
+                {
+                    foreach (var p in match.Presences)
+                    {
+                        if (p != null && seen.Add(p.UserId))
+                            list.Add(PresencePlayer(p, list.Count));
+                    }
+                }
+            }
+            if (list.Count == 0 && !string.IsNullOrEmpty(localId))
+            {
+                var name = GameSession.I.Profile != null ? GameSession.I.Profile.DisplayName : "Player";
+                list.Add(new NakamaRosterPlayer { userId = localId, username = name, team = 0, slot = 0 });
+            }
+            return new NakamaRosterDto { count = list.Count, players = list.ToArray() };
+        }
+
+        static NakamaRosterPlayer PresencePlayer(IUserPresence p, int index)
+        {
+            return new NakamaRosterPlayer
+            {
+                userId = p.UserId,
+                username = p.Username,
+                team = index % 2,
+                slot = index / 2
+            };
         }
 
         void BuildQueue()
@@ -59,53 +275,42 @@ namespace Ashfold
             UiFactory.Panel(canvas.transform, GameTheme.Hex(0x000000, 0.82f), "Dim");
 
             var sheet = UiFactory.Box(canvas.transform, new Vector2(0.22f, 0.28f), new Vector2(0.78f, 0.72f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Sheet");
-            UiFactory.Label(sheet.transform, "SEARCHING FOR MATCH", 30, GameTheme.Gold, TextAnchor.UpperCenter, FontStyle.Bold);
+            UiFactory.Label(sheet.transform, Loc.T("queue.searching"), 30, GameTheme.Gold, TextAnchor.UpperCenter, FontStyle.Bold);
 
             var statusBox = UiFactory.Box(sheet.transform, new Vector2(0.08f, 0.38f), new Vector2(0.92f, 0.62f), Vector2.zero, Vector2.zero, Color.clear, "Status");
-            _status = UiFactory.Label(statusBox.transform, "Casual 3v3  ·  0:00", 24, GameTheme.Teal, TextAnchor.MiddleCenter);
+            _status = UiFactory.Label(statusBox.transform, Loc.T("queue.status", 0), 24, GameTheme.Teal, TextAnchor.MiddleCenter);
 
-            var cancel = UiFactory.Button(sheet.transform, "CANCEL", CancelQueue, GameTheme.Crimson, GameTheme.Text);
+            var cancel = UiFactory.Button(sheet.transform, Loc.T("queue.cancel"), CancelQueue, GameTheme.Crimson, GameTheme.Text);
             UiFactory.SetAnchors(cancel.GetComponent<RectTransform>(), new Vector2(0.25f, 0.10f), new Vector2(0.75f, 0.28f), Vector2.zero, Vector2.zero);
-        }
-
-        IEnumerator QueueRoutine()
-        {
-            var t = 0f;
-            while (t < QueueSeconds)
-            {
-                t += Time.deltaTime;
-                var sec = Mathf.FloorToInt(t);
-                if (_status != null)
-                    _status.text = "Casual 3v3  ·  0:" + sec.ToString("00") + "\nFilling party with bots";
-                yield return null;
-            }
-
-            GameSession.I.Match = CreateMatch();
-            ShowMatchFound();
-            yield return new WaitForSeconds(FoundSeconds);
-            OpenDraft();
         }
 
         void ShowMatchFound()
         {
             if (_status != null)
-                _status.text = "MATCH FOUND";
+                _status.text = Loc.T("queue.found");
         }
 
         void CancelQueue()
         {
+            _queueCancelled = true;
+            UnhookSocket();
             if (_routine != null)
                 StopCoroutine(_routine);
             _routine = null;
             GameSession.I.Match = null;
+            if (GameSession.I != null && GameSession.I.Nakama != null)
+            {
+                var _ = GameSession.I.Nakama.DisconnectRealtimeAsync();
+            }
             CloseOverlay();
         }
 
-        static MatchSession CreateMatch()
+        static MatchSession CreateLocalMatch()
         {
             var match = new MatchSession();
             var me = GameSession.I.Profile != null ? GameSession.I.Profile.DisplayName : "Player";
-            match.Players.Add(new MatchParticipant { Name = me, IsLocal = true, Team = 0, Slot = 0 });
+            var uid = GameSession.I.Profile != null ? GameSession.I.Profile.UserId : "";
+            match.Players.Add(new MatchParticipant { UserId = uid, Name = me, IsLocal = true, Team = 0, Slot = 0 });
 
             var bot = 0;
             for (var slot = 1; slot < 3; slot++)
@@ -126,34 +331,36 @@ namespace Ashfold
 
             UiFactory.Label(
                 UiFactory.Box(canvas.transform, new Vector2(0.2f, 0.90f), new Vector2(0.8f, 0.98f), Vector2.zero, Vector2.zero, Color.clear, "Title").transform,
-                "DRAFT  ·  ASHFOLD LANE", 26, GameTheme.Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
+                Loc.T("draft.title"), 26, GameTheme.Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             _timer = UiFactory.Label(
                 UiFactory.Box(canvas.transform, new Vector2(0.42f, 0.82f), new Vector2(0.58f, 0.90f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Timer").transform,
                 "0:20", 28, GameTheme.Teal, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             _slotLabels = new Text[6];
-            BuildTeamColumn(canvas.transform, 0, 0.02f, "DAWN");
-            BuildTeamColumn(canvas.transform, 1, 0.70f, "DUSK");
+            BuildTeamColumn(canvas.transform, 0, 0.02f, Loc.T("draft.dawn"));
+            BuildTeamColumn(canvas.transform, 1, 0.70f, Loc.T("draft.dusk"));
 
             _heroCards = new Image[GameContent.Heroes.Length];
             for (var i = 0; i < GameContent.Heroes.Length; i++)
             {
                 var hero = GameContent.Heroes[i];
+                var unlocked = GameSession.I == null || GameSession.I.Profile == null || GameSession.I.Profile.IsHeroUnlocked(hero.Id);
                 var x0 = 0.28f + i * 0.15f;
                 var btn = UiFactory.Button(canvas.transform, hero.DisplayName.ToUpperInvariant(), () => SelectHero(hero.Id), GameTheme.BgPanel, GameTheme.Text);
                 UiFactory.SetAnchors(btn.GetComponent<RectTransform>(), new Vector2(x0, 0.30f), new Vector2(x0 + 0.14f, 0.72f), Vector2.zero, Vector2.zero);
                 btn.GetComponentInChildren<Text>().fontSize = 18;
+                btn.interactable = unlocked;
                 _heroCards[i] = btn.GetComponent<Image>();
-                var swatch = UiFactory.Box(btn.transform, new Vector2(0.15f, 0.55f), new Vector2(0.85f, 0.92f), Vector2.zero, Vector2.zero, GameContent.HeroColor(hero.Id), "C");
+                var swatch = UiFactory.Box(btn.transform, new Vector2(0.15f, 0.55f), new Vector2(0.85f, 0.92f), Vector2.zero, Vector2.zero, unlocked ? GameContent.HeroColor(hero.Id) : GameTheme.TextMuted, "C");
                 swatch.raycastTarget = false;
             }
 
-            _lockBtn = UiFactory.Button(canvas.transform, "LOCK IN", LockIn, GameTheme.Gold, GameTheme.Bg);
+            _lockBtn = UiFactory.Button(canvas.transform, Loc.T("draft.lock"), LockIn, GameTheme.Gold, GameTheme.Bg);
             UiFactory.SetAnchors(_lockBtn.GetComponent<RectTransform>(), new Vector2(0.38f, 0.08f), new Vector2(0.62f, 0.18f), Vector2.zero, Vector2.zero);
 
             var stage = UiFactory.Box(canvas.transform, new Vector2(0.02f, 0.01f), new Vector2(0.3f, 0.06f), Vector2.zero, Vector2.zero, Color.clear, "St");
-            UiFactory.Label(stage.transform, "STAGE 2.7  ·  DRAFT", 14, GameTheme.GoldDim, TextAnchor.MiddleLeft);
+            UiFactory.Label(stage.transform, Loc.T("draft.stage"), 14, GameTheme.GoldDim, TextAnchor.MiddleLeft);
 
             SelectHero(_pickedId);
             RefreshSlots();
@@ -182,6 +389,8 @@ namespace Ashfold
         {
             if (_locked)
                 return;
+            if (GameSession.I != null && GameSession.I.Profile != null && !GameSession.I.Profile.IsHeroUnlocked(id))
+                return;
             _pickedId = id;
             for (var i = 0; i < GameContent.Heroes.Length; i++)
             {
@@ -199,7 +408,7 @@ namespace Ashfold
             local.HeroId = _pickedId;
             local.Locked = true;
             _lockBtn.interactable = false;
-            _lockBtn.GetComponentInChildren<Text>().text = "LOCKED";
+            _lockBtn.GetComponentInChildren<Text>().text = Loc.T("draft.locked");
             RefreshSlots();
         }
 
@@ -238,6 +447,11 @@ namespace Ashfold
             }
 
             yield return new WaitForSeconds(0.6f);
+            foreach (var p in GameSession.I.Match.Players)
+            {
+                if (!p.IsBot && !p.IsLocal && string.IsNullOrEmpty(p.HeroId))
+                    p.HeroId = "bastion";
+            }
             OpenLoading();
         }
 
@@ -260,7 +474,9 @@ namespace Ashfold
         {
             foreach (var p in GameSession.I.Match.Players)
             {
-                if (!p.Locked)
+                if (p.IsLocal && !p.Locked)
+                    return false;
+                if (p.IsBot && !p.Locked)
                     return false;
             }
             return true;
@@ -275,8 +491,8 @@ namespace Ashfold
                 var idx = p.Team * 3 + p.Slot;
                 if (idx < 0 || idx >= _slotLabels.Length || _slotLabels[idx] == null)
                     continue;
-                var hero = string.IsNullOrEmpty(p.HeroId) ? "PICKING…" : GameContent.GetHero(p.HeroId).DisplayName.ToUpperInvariant();
-                var tag = p.IsLocal ? "YOU · " : p.IsBot ? "BOT · " : "";
+                var hero = string.IsNullOrEmpty(p.HeroId) ? Loc.T("draft.picking") : GameContent.GetHero(p.HeroId).DisplayName.ToUpperInvariant();
+                var tag = p.IsLocal ? Loc.T("draft.you") : p.IsBot ? Loc.T("draft.bot") : "";
                 _slotLabels[idx].text = tag + p.Name + "\n" + hero;
             }
         }
@@ -290,18 +506,18 @@ namespace Ashfold
 
             UiFactory.Label(
                 UiFactory.Box(canvas.transform, new Vector2(0.15f, 0.78f), new Vector2(0.85f, 0.90f), Vector2.zero, Vector2.zero, Color.clear, "T").transform,
-                "ASHFOLD LANE", 36, GameTheme.Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
+                Loc.T("loading.map"), 36, GameTheme.Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             UiFactory.Label(
                 UiFactory.Box(canvas.transform, new Vector2(0.15f, 0.70f), new Vector2(0.85f, 0.78f), Vector2.zero, Vector2.zero, Color.clear, "M").transform,
-                "CASUAL 3v3  ·  PHOTON OFF (STAGE 5)", 16, GameTheme.TextMuted, TextAnchor.MiddleCenter);
+                Loc.T("loading.mode"), 16, GameTheme.TextMuted, TextAnchor.MiddleCenter);
 
-            DrawLoadingTeam(canvas.transform, 0, 0.06f, "DAWN");
-            DrawLoadingTeam(canvas.transform, 1, 0.52f, "DUSK");
+            DrawLoadingTeam(canvas.transform, 0, 0.06f, Loc.T("draft.dawn"));
+            DrawLoadingTeam(canvas.transform, 1, 0.52f, Loc.T("draft.dusk"));
 
             _status = UiFactory.Label(
                 UiFactory.Box(canvas.transform, new Vector2(0.2f, 0.08f), new Vector2(0.8f, 0.16f), Vector2.zero, Vector2.zero, Color.clear, "L").transform,
-                "Entering the fold…", 20, GameTheme.Teal, TextAnchor.MiddleCenter);
+                Loc.T("loading.entering"), 20, GameTheme.Teal, TextAnchor.MiddleCenter);
 
             _routine = StartCoroutine(LoadingRoutine());
         }
@@ -330,7 +546,7 @@ namespace Ashfold
             {
                 t += Time.deltaTime;
                 if (_status != null)
-                    _status.text = "Entering the fold…  " + Mathf.Clamp01(t / LoadingSeconds).ToString("P0");
+                    _status.text = Loc.T("loading.entering_pct", Mathf.Clamp01(t / LoadingSeconds));
                 yield return null;
             }
 

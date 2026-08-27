@@ -13,18 +13,21 @@ namespace Ashfold
 
             var sheet = UiFactory.Box(canvas.transform, new Vector2(0.08f, 0.12f), new Vector2(0.92f, 0.88f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Sheet");
             var titleBox = UiFactory.Box(sheet.transform, new Vector2(0.04f, 0.88f), new Vector2(0.78f, 0.98f), Vector2.zero, Vector2.zero, Color.clear, "Title");
-            UiFactory.Label(titleBox.transform, "HEROES", 32, GameTheme.Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
+            UiFactory.Label(titleBox.transform, Loc.T("catalog.heroes"), 32, GameTheme.Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
 
-            var close = UiFactory.Button(sheet.transform, "CLOSE", () => Object.Destroy(canvas.gameObject), GameTheme.BgPanelSoft, GameTheme.Text);
+            var close = UiFactory.Button(sheet.transform, Loc.T("catalog.close"), () => Object.Destroy(canvas.gameObject), GameTheme.BgPanelSoft, GameTheme.Text);
             UiFactory.SetAnchors(close.GetComponent<RectTransform>(), new Vector2(0.82f, 0.88f), new Vector2(0.98f, 0.98f), new Vector2(8, 8), new Vector2(-8, -8));
             close.GetComponentInChildren<Text>().fontSize = 18;
 
             for (var i = 0; i < GameContent.Heroes.Length; i++)
             {
                 var hero = GameContent.Heroes[i];
+                var unlocked = GameSession.I == null || GameSession.I.Profile == null || GameSession.I.Profile.IsHeroUnlocked(hero.Id);
                 var x0 = 0.04f + i * 0.32f;
                 var card = UiFactory.Button(sheet.transform, "", () =>
                 {
+                    if (!unlocked)
+                        return;
                     GameSession.I.ShowcaseHeroId = hero.Id;
                     onChanged?.Invoke();
                     Object.Destroy(canvas.gameObject);
@@ -32,10 +35,13 @@ namespace Ashfold
                 UiFactory.SetAnchors(card.GetComponent<RectTransform>(), new Vector2(x0, 0.12f), new Vector2(x0 + 0.30f, 0.82f), Vector2.zero, Vector2.zero);
                 Object.Destroy(card.GetComponentInChildren<Text>().gameObject);
 
-                var color = UiFactory.Box(card.transform, new Vector2(0.2f, 0.42f), new Vector2(0.8f, 0.88f), Vector2.zero, Vector2.zero, GameContent.HeroColor(hero.Id), "Swatch");
+                var tint = unlocked ? GameContent.HeroColor(hero.Id) : GameTheme.TextMuted;
+                var color = UiFactory.Box(card.transform, new Vector2(0.2f, 0.42f), new Vector2(0.8f, 0.88f), Vector2.zero, Vector2.zero, tint, "Swatch");
                 color.raycastTarget = false;
-                UiFactory.Label(card.transform, hero.DisplayName.ToUpperInvariant() + "\n" + GameContent.RoleLabel(hero.Role) + "\n" + hero.Tagline,
-                    20, GameTheme.Text, TextAnchor.LowerCenter, FontStyle.Bold, true);
+                var caption = unlocked
+                    ? hero.DisplayName.ToUpperInvariant() + "\n" + GameContent.RoleLabel(hero.Role) + "\n" + GameContent.HeroTagline(hero)
+                    : hero.DisplayName.ToUpperInvariant() + "\n" + Loc.T("catalog.locked");
+                UiFactory.Label(card.transform, caption, 20, unlocked ? GameTheme.Text : GameTheme.TextMuted, TextAnchor.LowerCenter, FontStyle.Bold, true);
             }
         }
 
@@ -45,9 +51,9 @@ namespace Ashfold
             UiFactory.Panel(canvas.transform, GameTheme.Hex(0x000000, 0.78f), "Dim");
             var sheet = UiFactory.Box(canvas.transform, new Vector2(0.08f, 0.12f), new Vector2(0.92f, 0.88f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Sheet");
             var titleBox = UiFactory.Box(sheet.transform, new Vector2(0.04f, 0.88f), new Vector2(0.78f, 0.98f), Vector2.zero, Vector2.zero, Color.clear, "Title");
-            UiFactory.Label(titleBox.transform, "SHOP  ·  COSMETICS STUB", 26, GameTheme.Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
+            UiFactory.Label(titleBox.transform, Loc.T("catalog.shop"), 26, GameTheme.Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
 
-            var close = UiFactory.Button(sheet.transform, "CLOSE", () => Object.Destroy(canvas.gameObject), GameTheme.BgPanelSoft, GameTheme.Text);
+            var close = UiFactory.Button(sheet.transform, Loc.T("catalog.close"), () => Object.Destroy(canvas.gameObject), GameTheme.BgPanelSoft, GameTheme.Text);
             UiFactory.SetAnchors(close.GetComponent<RectTransform>(), new Vector2(0.82f, 0.88f), new Vector2(0.98f, 0.98f), new Vector2(8, 8), new Vector2(-8, -8));
             close.GetComponentInChildren<Text>().fontSize = 18;
 
@@ -60,7 +66,7 @@ namespace Ashfold
                 var y0 = 0.48f - row * 0.36f;
                 var card = UiFactory.Box(sheet.transform, new Vector2(x0, y0), new Vector2(x0 + 0.30f, y0 + 0.32f), Vector2.zero, Vector2.zero, GameTheme.BgPanelSoft, item.Id);
                 UiFactory.Label(card.transform,
-                    item.DisplayName.ToUpperInvariant() + "\n" + item.Branch + " · " + item.Cost + "g\n" + item.Effect + "\n(in-match shop · 3.13)",
+                    GameContent.ItemName(item).ToUpperInvariant() + "\n" + GameContent.ItemBranch(item) + " · " + item.Cost + "g\n" + GameContent.ItemEffect(item) + "\n" + Loc.T("catalog.in_match"),
                     16, GameTheme.TextMuted, TextAnchor.MiddleCenter, FontStyle.Normal, true);
             }
         }

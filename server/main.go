@@ -34,7 +34,21 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		return err
 	}
 
-	logger.Info("Ashfold registered match=%s rpc=%s,%s", matchName, rpcHealth, rpcCreateDebugMatch)
+	if err := initializer.RegisterMatchmakerMatched(func(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, entries []runtime.MatchmakerEntry) (string, error) {
+		logger.Info("Ashfold matchmaker matched count=%d", len(entries))
+		matchID, err := nk.MatchCreate(ctx, matchName, map[string]interface{}{
+			"mode": "casual_3v3",
+		})
+		if err != nil {
+			logger.Error("MatchCreate from matchmaker failed: %v", err)
+			return "", err
+		}
+		return matchID, nil
+	}); err != nil {
+		return err
+	}
+
+	logger.Info("Ashfold registered match=%s rpc=%s,%s matchmaker", matchName, rpcHealth, rpcCreateDebugMatch)
 	return nil
 }
 

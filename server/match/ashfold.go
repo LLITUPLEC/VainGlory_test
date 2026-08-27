@@ -10,37 +10,41 @@ import (
 
 // Op-codes клиент ↔ сервер (заготовка боя).
 const (
-	OpPing      int64 = 1
-	OpPong      int64 = 2
-	OpChat      int64 = 10
-	OpSnapshot  int64 = 20 // позже: состояние кадра
-	OpInputMove int64 = 30
+	OpPing       int64 = 1
+	OpPong       int64 = 2
+	OpChat       int64 = 10
+	OpRoster     int64 = 11
+	OpSnapshot   int64 = 20
+	OpInputMove  int64 = 30
 	OpInputSkill int64 = 31
 )
 
 const (
-	tickRate       = 10 // 10 Гц — цель для v1 боя
-	emptyTicksMax  = tickRate * 60 // 60 с пустого матча → конец
-	maxPlayers     = 6
+	tickRate      = 10
+	emptyTicksMax = tickRate * 60
+	maxPlayers    = 6
 )
 
-// AshfoldMatch — авторитетный 3v3 (сейчас: join/leave + ping).
 type AshfoldMatch struct{}
 
 type playerSlot struct {
 	Presence runtime.Presence
+	Name     string
 	Team     int // 0 Dawn, 1 Dusk
+	Slot     int // 0..2
 }
 
 type State struct {
-	Presences  map[string]*playerSlot
-	EmptyTicks int
-	Tick       int64
+	Presences    map[string]*playerSlot
+	PendingNames map[string]string
+	EmptyTicks   int
+	Tick         int64
 }
 
 func (m *AshfoldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, params map[string]interface{}) (interface{}, int, string) {
 	state := &State{
-		Presences: make(map[string]*playerSlot),
+		Presences:    make(map[string]*playerSlot),
+		PendingNames: make(map[string]string),
 	}
 	labelBytes, _ := json.Marshal(map[string]interface{}{
 		"mode":  "casual_3v3",
@@ -56,6 +60,9 @@ func (m *AshfoldMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Logg
 	if len(s.Presences) >= maxPlayers {
 		return s, false, "match full"
 	}
+	if name := metadata["name"]; name != "" {
+		s.PendingNames[presence.GetUserId()] = name
+	}
 	return s, true, ""
 }
 
@@ -63,15 +70,20 @@ func (m *AshfoldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db 
 	s := state.(*State)
 	s.EmptyTicks = 0
 	for _, p := range presences {
-		team := len(s.Presences) % 2
-		s.Presences[p.GetUserId()] = &playerSlot{Presence: p, Team: team}
-		logger.Info("join user=%s team=%d count=%d", p.GetUserId(), team, len(s.Presences))
+		team := 0
+		if teamCount(s, 0) > teamCount(s, 1) {
+			team = 1
+		}
+		slot := nextSlot(s, team)
+		name := s.PendingNames[p.GetUserId()]
+		if name == "" {
+			name = p.GetUsername()
+		}
+		delete(s.PendingNames, p.GetUserId())
+		s.Presences[p.GetUserId()] = &playerSlot{Presence: p, Name: name, Team: team, Slot: slot}
+		logger.Info("join user=%s name=%s team=%d slot=%d count=%d", p.GetUserId(), name, team, slot, len(s.Presences))
 	}
-	payload, _ := json.Marshal(map[string]interface{}{
-		"type":  "roster",
-		"count": len(s.Presences),
-	})
-	dispatcher.BroadcastMessage(OpChat, payload, nil, nil, true)
+	dispatcher.BroadcastMessage(OpRoster, rosterPayload(s), nil, nil, true)
 	return s
 }
 
@@ -80,6 +92,9 @@ func (m *AshfoldMatch) MatchLeave(ctx context.Context, logger runtime.Logger, db
 	for _, p := range presences {
 		delete(s.Presences, p.GetUserId())
 		logger.Info("leave user=%s count=%d", p.GetUserId(), len(s.Presences))
+	}
+	if len(s.Presences) > 0 {
+		dispatcher.BroadcastMessage(OpRoster, rosterPayload(s), nil, nil, true)
 	}
 	return s
 }
@@ -91,10 +106,8 @@ func (m *AshfoldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db 
 	for _, msg := range messages {
 		switch msg.GetOpCode() {
 		case OpPing:
-			// MatchData сам реализует Presence (nakama-common v1.32)
 			dispatcher.BroadcastMessage(OpPong, msg.GetData(), []runtime.Presence{msg}, nil, true)
 		default:
-			// Пока эхо — позже разбор InputMove / Skill
 			dispatcher.BroadcastMessage(msg.GetOpCode(), msg.GetData(), nil, nil, true)
 		}
 	}
@@ -119,4 +132,47 @@ func (m *AshfoldMatch) MatchTerminate(ctx context.Context, logger runtime.Logger
 
 func (m *AshfoldMatch) MatchSignal(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, data string) (interface{}, string) {
 	return state, "ok:" + data
+}
+
+func teamCount(s *State, team int) int {
+	n := 0
+	for _, p := range s.Presences {
+		if p.Team == team {
+			n++
+		}
+	}
+	return n
+}
+
+func nextSlot(s *State, team int) int {
+	used := [3]bool{}
+	for _, p := range s.Presences {
+		if p.Team == team && p.Slot >= 0 && p.Slot < 3 {
+			used[p.Slot] = true
+		}
+	}
+	for i := 0; i < 3; i++ {
+		if !used[i] {
+			return i
+		}
+	}
+	return 0
+}
+
+func rosterPayload(s *State) []byte {
+	players := make([]map[string]interface{}, 0, len(s.Presences))
+	for id, p := range s.Presences {
+		players = append(players, map[string]interface{}{
+			"userId":   id,
+			"username": p.Name,
+			"team":     p.Team,
+			"slot":     p.Slot,
+		})
+	}
+	b, _ := json.Marshal(map[string]interface{}{
+		"type":    "roster",
+		"count":   len(s.Presences),
+		"players": players,
+	})
+	return b
 }

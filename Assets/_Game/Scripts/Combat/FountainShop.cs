@@ -16,9 +16,9 @@ namespace Ashfold
             UiFactory.Panel(canvas.transform, GameTheme.Hex(0x000000, 0.72f), "Dim");
             var sheet = UiFactory.Box(canvas.transform, new Vector2(0.08f, 0.12f), new Vector2(0.92f, 0.88f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Sheet");
             var title = UiFactory.Box(sheet.transform, new Vector2(0.04f, 0.88f), new Vector2(0.70f, 0.98f), Vector2.zero, Vector2.zero, Color.clear, "T");
-            UiFactory.Label(title.transform, "FOUNTAIN SHOP  ·  " + (BattleRuntime.I != null ? BattleRuntime.I.Gold : 0) + " G", 26, GameTheme.Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
+            UiFactory.Label(title.transform, Loc.T("shop.fountain", BattleRuntime.I != null ? BattleRuntime.I.Gold : 0), 26, GameTheme.Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
 
-            var close = UiFactory.Button(sheet.transform, "CLOSE", () => Object.Destroy(canvas.gameObject), GameTheme.BgPanelSoft, GameTheme.Text);
+            var close = UiFactory.Button(sheet.transform, Loc.T("shop.close"), () => Object.Destroy(canvas.gameObject), GameTheme.BgPanelSoft, GameTheme.Text);
             UiFactory.SetAnchors(close.GetComponent<RectTransform>(), new Vector2(0.82f, 0.88f), new Vector2(0.98f, 0.98f), new Vector2(8, 8), new Vector2(-8, -8));
             close.GetComponentInChildren<Text>().fontSize = 18;
 
@@ -47,7 +47,7 @@ namespace Ashfold
                 UiFactory.SetAnchors(card.GetComponent<RectTransform>(), new Vector2(x0, y0), new Vector2(x0 + 0.30f, y0 + 0.32f), Vector2.zero, Vector2.zero);
                 Object.Destroy(card.GetComponentInChildren<Text>().gameObject);
                 UiFactory.Label(card.transform,
-                    item.DisplayName.ToUpperInvariant() + "\n" + item.Branch + " · " + item.Cost + "g\n" + item.Effect + (owned > 0 ? "\nx" + owned : ""),
+                    GameContent.ItemName(item).ToUpperInvariant() + "\n" + GameContent.ItemBranch(item) + " · " + item.Cost + "g\n" + GameContent.ItemEffect(item) + (owned > 0 ? "\nx" + owned : ""),
                     16, GameTheme.Text, TextAnchor.MiddleCenter, FontStyle.Normal, true);
             }
         }

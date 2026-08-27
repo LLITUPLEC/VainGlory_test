@@ -1,92 +1,111 @@
 # Ashfold server (Nakama + Postgres + Go)
 
-Стек как у старого проекта на VPS: **тот же** `docker compose up -d`, Postgres volume, ключи, порты на `192.168.9.24`.  
-Разница только в runtime-модулях: **Go → `modules/backend.so`**, а не `.lua`.
+**Живой стенд (2026-08-27):** Beget VPS Ubuntu 26.04 · IP `46.173.17.51` · каталог `~/ashfold`.
 
-Nakama: **3.22.0** (как у вас раньше).
+| Слой | Что |
+|---|---|
+| Nakama | `3.22.0` + Go-плагин `modules/backend.so` |
+| Postgres | контейнер `postgres:12.2-alpine`, БД `nakama` |
+| Снаружи | **Caddy** + Let’s Encrypt: `https://api.prokrust-play.ru:443` → `127.0.0.1:7350` |
+| Клиент Unity | `NakamaConfig`: `https` / `api.prokrust-play.ru` / `443` |
+| Console | `http://46.173.17.51:7351` (логин как в `docker-compose.yml`) |
+
+Прямой HTTP `:7350` с Unity **нельзя**: Player Settings режут insecure. Домен без Caddy на `:443` тоже не зайдёт.
+
+Nakama слушает `0.0.0.0:7349-7351`. Старый LAN `192.168.9.24` и Nginx Proxy Manager **не используются**.
 
 ---
 
-## Lua vs Go — алгоритм
+## Lua vs Go
 
 | | Старый (Lua) | Ashfold (Go) |
 |---|---|---|
 | Файлы в `modules/` | `*.lua` | `backend.so` |
-| Сборка | не нужна | **один раз** `./build-plugin.sh` (или после правок Go) |
-| Запуск | `docker compose up -d` | то же самое |
+| Сборка | не нужна | `./build-plugin.sh` (после правок Go) |
+| Запуск | `docker compose up -d` | то же |
 | Volume | `./:/nakama/data` | то же |
 
-Старые `.lua` из другого проекта из `modules/` лучше убрать, чтобы не мешали.
+Go на хосте не нужен: сборка в `heroiclabs/nakama-pluginbuilder:3.22.0`.  
+Если `./build-plugin.sh: /bin/sh^M` — CRLF с Windows: `sed -i 's/\r$//' build-plugin.sh`. В репо стоит `server/.gitattributes` (`*.sh` → LF).
 
 ---
 
-## Команды на VPS
+## Поднять с нуля (новый VPS)
 
-Подготовьте каталог (например `~/nakama` или `~/ashfold`), положите туда содержимое `server/`:
+1. Docker Engine + Compose plugin, `ufw`: `OpenSSH`, `80`, `443` (по желанию `7351` для Console).
+2. Скопировать содержимое `server/` в `~/ashfold`. В `docker-compose.yml` порты Nakama: `0.0.0.0:7350:7350` и соседние, **не** старый LAN-IP.
+3. Собрать плагин и поднять контейнеры:
 
 ```bash
-cd ~/nakama   # или куда скопировали server/
-
-# 1) Собрать Go-плагин (нужен Docker; Go на хосте не обязателен)
+cd ~/ashfold
 chmod +x build-plugin.sh
-./build-plugin.sh
-# должно появиться: modules/backend.so  (если снова ошибка — пришлите вывод)
-
-# 2) Если старые контейнеры ещё крутятся — остановить
-docker compose down
-
-# 3) Поднять как раньше
+./build-plugin.sh          # modules/backend.so
 docker compose up -d
-
-# 4) Смотреть логи — обязательно: "Ashfold backend init" и modules count >= 1
 docker compose logs -f nakama
+# в логе: "Ashfold backend init", modules count >= 1, "Startup done"
 ```
 
-Проверки:
+4. A-запись `api.prokrust-play.ru` → публичный IP VPS.
+5. Caddy (`/etc/caddy/Caddyfile`) — **весь** дефолтный `:80 { file_server }` заменить на:
 
-```bash
-docker compose ps
-curl -s http://192.168.9.24:7350/
-# Console: http://192.168.9.24:7351  (Prokrust / как в compose)
+```caddy
+{
+	email your@email
+}
+
+api.prokrust-play.ru {
+	reverse_proxy 127.0.0.1:7350
+}
 ```
 
-После правок Go — снова `./build-plugin.sh` и:
+```bash
+sudo ufw allow 80/tcp && sudo ufw allow 443/tcp
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+После правок Go:
 
 ```bash
+./build-plugin.sh
 docker compose restart nakama
 ```
 
 ---
 
-## Если Unity: «A task was canceled»
+## Проверки
 
-С ПК проверьте (PowerShell):
+```bash
+# TLS + прокси живы → 401 (нет сессии), не таймаут
+curl -sS -m 5 -o /dev/null -w "%{http_code}\n" https://api.prokrust-play.ru/v2/account
+
+# Console
+# http://46.173.17.51:7351
+```
+
+С ПК:
 
 ```powershell
 Test-NetConnection api.prokrust-play.ru -Port 443
+nslookup api.prokrust-play.ru
 ```
 
-Если `TcpTestSucceeded : False` — проблема **не в коде**, а в reverse-proxy / firewall на VPS.
-Nakama слушает только `192.168.9.24:7350`; снаружи нужен nginx/caddy на `:443`.
+В Unity Play Mode: Guest → лог `Nakama authenticated` и `ashfold_health → … "ok":true`.
 
-На VPS:
+`GET /v2/healthcheck` у Nakama 3.22 **нет** (`Not Found`) — это не падение сервера.
+
+`ERROR: Failed to extract ServerMetadata from context` — шум grpc-gateway (curl без gRPC-метаданных, сканы `:7350`). На логин/RPC не влияет. Чтобы меньше мусора снаружи: закрыть UFW `7349`/`7350`, оставить `80`/`443` (и `7351` при необходимости).
+
+---
+
+## Если Unity: timeout / «A task was canceled»
+
+Обычно **не ServerKey**, а нет TLS на `:443` или DNS смотрит не на этот VPS.
 
 ```bash
-# слушает ли кто-то 443?
 ss -tlnp | grep -E ':443|:7350'
-
-# nginx / caddy жив?
-systemctl status nginx
-# или
 systemctl status caddy
-# или docker: docker ps | grep -iE 'nginx|caddy|traefik'
-
-# локально до Nakama (должно ответить)
-curl -sS -m 3 -u 'gDNVymCHsgbFr6QL4ENkImtds7Bu3T7bi1TG9QUDE0U=:' \
-  http://192.168.9.24:7350/v2/healthcheck
 ```
-
-Почините прокси (как в старом ProKrust), затем снова Play Mode.
 
 ---
 
@@ -95,4 +114,18 @@ curl -sS -m 3 -u 'gDNVymCHsgbFr6QL4ENkImtds7Bu3T7bi1TG9QUDE0U=:' \
 | Id | Назначение |
 |----|------------|
 | `ashfold_health` | проверка модуля |
-| `ashfold_create_debug_match` | создать матч `ashfold_3v3` |
+| `ashfold_create_debug_match` | создать матч `ashfold_3v3` вручную |
+| matchmaker | 2 игрока с `mode=casual_3v3` → `MatchCreate(ashfold_3v3)` |
+
+После смены Go на VPS:
+
+```bash
+cd ~/ashfold
+# скопируй новые main.go и match/, затем:
+./build-plugin.sh
+docker compose restart nakama
+docker compose logs -f nakama
+# в логе: "Ashfold registered ... matchmaker"
+```
+
+Два клиента: PLAY → CASUAL 3v3. Ждут друг друга, затем Match Found (имена живых в драфте). SOLO — офлайн vs боты. Бой пока локальный (этап 5.4A).

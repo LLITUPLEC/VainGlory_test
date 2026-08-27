@@ -1,7 +1,7 @@
 namespace Ashfold
 {
     /// <summary>
-    /// Внешний вход: https://api.prokrust-play.ru (NPM → 192.168.9.24:7350).
+        /// Внешний вход: https://api.prokrust-play.ru (Caddy → 127.0.0.1:7350).
     /// </summary>
     public static class NakamaConfig
     {

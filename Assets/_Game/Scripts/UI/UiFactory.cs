@@ -13,8 +13,13 @@ namespace Ashfold
             get
             {
                 if (_font == null)
-                    _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")
-                            ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
+                {
+                    _font = Font.CreateDynamicFontFromOSFont(
+                        new[] { "Segoe UI", "Arial", "Noto Sans", "Roboto", "Helvetica" }, 24);
+                    if (_font == null)
+                        _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")
+                                ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
+                }
                 return _font;
             }
         }
@@ -97,7 +102,74 @@ namespace Ashfold
             return btn;
         }
 
-        public static InputField Input(Transform parent, string placeholder)
+        static Sprite _globeSprite;
+
+        public static Button GlobeButton(Transform parent, UnityAction onClick)
+        {
+            var go = new GameObject("Btn_Lang", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var img = go.GetComponent<Image>();
+            img.sprite = GlobeSprite();
+            img.preserveAspect = true;
+            img.color = Color.white;
+            img.raycastTarget = true;
+            var btn = go.GetComponent<Button>();
+            var colors = btn.colors;
+            colors.highlightedColor = Color.Lerp(Color.white, GameTheme.Gold, 0.25f);
+            colors.pressedColor = GameTheme.GoldDim;
+            btn.colors = colors;
+            btn.onClick.AddListener(onClick);
+            return btn;
+        }
+
+        public static Sprite GlobeSprite()
+        {
+            if (_globeSprite != null && _globeSprite.texture != null)
+                return _globeSprite;
+            _globeSprite = null;
+
+            const int size = 64;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            var cx = (size - 1) * 0.5f;
+            var r = size * 0.42f;
+            for (var y = 0; y < size; y++)
+            {
+                for (var x = 0; x < size; x++)
+                {
+                    var dx = (x - cx) / r;
+                    var dy = (y - cx) / r;
+                    var d2 = dx * dx + dy * dy;
+                    if (d2 > 1f)
+                    {
+                        tex.SetPixel(x, y, Color.clear);
+                        continue;
+                    }
+
+                    var nz = Mathf.Sqrt(Mathf.Max(0f, 1f - d2));
+                    var lon = Mathf.Atan2(dx, nz);
+                    var lat = Mathf.Asin(Mathf.Clamp(dy, -1f, 1f));
+                    var light = 0.42f + 0.58f * nz;
+                    var fill = Color.Lerp(GameTheme.GoldDim, GameTheme.Gold, light);
+                    var rim = d2 > 0.86f;
+                    var meridian = Mathf.Abs(Mathf.Repeat(lon + Mathf.PI, Mathf.PI * 0.5f) - Mathf.PI * 0.25f) < 0.07f;
+                    var parallel = Mathf.Abs(lat) < 0.055f
+                                  || Mathf.Abs(Mathf.Abs(lat) - 0.62f) < 0.055f;
+                    tex.SetPixel(x, y, rim || meridian || parallel ? GameTheme.Bg : fill);
+                }
+            }
+
+            tex.Apply(false, false);
+            _globeSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 64f);
+            _globeSprite.hideFlags = HideFlags.HideAndDontSave;
+            return _globeSprite;
+        }
+
+        public static InputField Input(Transform parent, string placeholder, int characterLimit = 16, InputField.ContentType contentType = InputField.ContentType.Standard)
         {
             var go = new GameObject("Input", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(InputField));
             go.transform.SetParent(parent, false);
@@ -128,7 +200,8 @@ namespace Ashfold
             var field = go.GetComponent<InputField>();
             field.textComponent = text;
             field.placeholder = ph;
-            field.characterLimit = 16;
+            field.characterLimit = characterLimit;
+            field.contentType = contentType;
             return field;
         }
 

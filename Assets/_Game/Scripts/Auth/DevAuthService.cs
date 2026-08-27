@@ -1,15 +1,25 @@
+using System;
 using System.Threading.Tasks;
 using UnityEngine;
 
 namespace Ashfold
 {
-    /// <summary>Локальный гость (этап 0.3). Позже заменить Nakama device auth.</summary>
+    /// <summary>Локальный гость (этап 0.3). Email недоступен без Nakama.</summary>
     public sealed class DevAuthService : IAuthService
     {
         public const string KeyId = "ashfold.userId";
         public const string KeyName = "ashfold.displayName";
 
         public static bool HasSavedGuest => PlayerPrefs.HasKey(KeyId);
+
+        public bool SupportsEmail => false;
+
+        public async Task<PlayerProfile> TryRestoreAsync()
+        {
+            if (!HasSavedGuest)
+                return null;
+            return await SignInGuestAsync(PlayerPrefs.GetString(KeyName, string.Empty));
+        }
 
         public async Task<PlayerProfile> SignInGuestAsync(string preferredName)
         {
@@ -34,7 +44,7 @@ namespace Ashfold
             PlayerPrefs.SetString(KeyName, name);
             PlayerPrefs.Save();
 
-            return new PlayerProfile
+            var profile = new PlayerProfile
             {
                 UserId = id,
                 DisplayName = name,
@@ -42,6 +52,29 @@ namespace Ashfold
                 Essence = 0,
                 AuthProvider = "dev-guest"
             };
+            await NakamaProgress.HydrateAsync(null, profile);
+            return profile;
+        }
+
+        public Task<PlayerProfile> SignInEmailAsync(string email, string password)
+        {
+            throw new InvalidOperationException("Email login needs NakamaConfig.UseServer=true");
+        }
+
+        public Task<PlayerProfile> LinkEmailAsync(string email, string password)
+        {
+            throw new InvalidOperationException("Email link needs NakamaConfig.UseServer=true");
+        }
+
+        public async Task SaveProgressAsync(PlayerProfile profile)
+        {
+            await NakamaProgress.PushAsync(null, profile);
+        }
+
+        public void SignOutLocal()
+        {
+            PlayerPrefs.DeleteKey(KeyId);
+            PlayerPrefs.Save();
         }
     }
 }
