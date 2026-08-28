@@ -36,16 +36,20 @@ namespace Ashfold
                 QualitySettings.shadows = ShadowQuality.Disable;
                 QualitySettings.antiAliasing = 0;
             }
-            RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.22f, 0.28f, 0.30f);
+            var map = FoldMapBuilder.Build(transform);
+            var desert = map.Root != null && map.Root.GetComponent<FoldMapAuthoring>() != null;
+            if (!desert)
+            {
+                RenderSettings.ambientMode = AmbientMode.Flat;
+                RenderSettings.ambientLight = new Color(0.22f, 0.28f, 0.30f);
+            }
             var sun = new GameObject("Sun");
-            sun.transform.rotation = Quaternion.Euler(50f, -35f, 0f);
+            sun.transform.rotation = Quaternion.Euler(desert ? 42f : 50f, desert ? 25f : -35f, 0f);
             var light = sun.AddComponent<Light>();
             light.type = LightType.Directional;
-            light.intensity = 1.15f;
-            light.color = new Color(0.92f, 0.95f, 0.98f);
-
-            var map = FoldMapBuilder.Build(transform);
+            light.intensity = desert ? 1.35f : 1.15f;
+            light.color = desert ? new Color(1f, 0.93f, 0.78f) : new Color(0.92f, 0.95f, 0.98f);
+            light.shadows = Application.isMobilePlatform ? LightShadows.None : LightShadows.Soft;
             _spawn = map.DawnSpawn;
 
             if (_networked)
@@ -93,7 +97,9 @@ namespace Ashfold
             if (cam != null && _hero != null)
             {
                 cam.clearFlags = CameraClearFlags.SolidColor;
-                cam.backgroundColor = GameTheme.Hex(0x0A1412);
+                cam.backgroundColor = map.Root != null && map.Root.GetComponent<FoldMapAuthoring>() != null
+                    ? new Color(0.82f, 0.68f, 0.45f)
+                    : GameTheme.Hex(0x0A1412);
                 var follow = cam.gameObject.AddComponent<IsoFollowCamera>();
                 follow.Target = _hero.transform;
                 cam.transform.position = _hero.transform.position + follow.Offset;
