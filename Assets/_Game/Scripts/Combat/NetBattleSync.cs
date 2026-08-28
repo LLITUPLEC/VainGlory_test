@@ -128,9 +128,25 @@ namespace Ashfold
             }
 
             var combat = unit.GetComponent<HeroCombat>();
+            if (combat != null)
+                combat.ApplyItemsCsv(e.itemsCsv);
             var snapPos = new Vector3(e.x, unit.GroundY, e.z);
             if (unit.IsPlayer && combat != null && e.hp < prevHp - 0.4f)
                 combat.CancelRecall();
+
+            if (unit.IsPlayer && combat != null)
+            {
+                var jump = Vector2.Distance(
+                    new Vector2(unit.transform.position.x, unit.transform.position.z),
+                    new Vector2(e.x, e.z));
+                if (jump > 8f)
+                {
+                    unit.transform.position = snapPos;
+                    combat.CancelRecall();
+                    if (combat.Motor != null)
+                        combat.Motor.Stop();
+                }
+            }
 
             if (!e.alive)
             {
@@ -170,7 +186,7 @@ namespace Ashfold
             }
 
             if (unit.IsPlayer)
-                ReconcileLocal(unit, snapPos);
+                ReconcileLocal(unit, snapPos, combat);
         }
 
         static void SetRenderers(CombatUnit unit, bool on)
@@ -182,8 +198,10 @@ namespace Ashfold
                 col.enabled = on;
         }
 
-        void ReconcileLocal(CombatUnit unit, Vector3 serverPos)
+        void ReconcileLocal(CombatUnit unit, Vector3 serverPos, HeroCombat combat)
         {
+            if (combat != null)
+                combat.EnsureControlIfAlive();
             var motor = unit.GetComponent<TapMoveMotor>();
             var delta = unit.transform.position - serverPos;
             delta.y = 0f;
@@ -319,6 +337,10 @@ namespace Ashfold
                 if (!_units.TryGetValue(hit.src, out var src) || src == null)
                     continue;
                 if (!_units.TryGetValue(hit.dst, out var dst) || dst == null)
+                    continue;
+                CombatUnit.MarkHeroFight(src, dst);
+                DamagePopup.TryShow(dst, src, hit.dmg);
+                if (hit.skill != 0 && src.IsPlayer)
                     continue;
                 var combat = src.GetComponent<HeroCombat>();
                 var ranged = src.IsStructure || (combat != null && combat.Def != null && combat.Def.Ranged);

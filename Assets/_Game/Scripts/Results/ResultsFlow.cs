@@ -102,7 +102,7 @@ namespace Ashfold
                     yield return null;
                 if (GameSession.I.Nakama != null)
                 {
-                    var leave = GameSession.I.Nakama.DisconnectRealtimeAsync();
+                    var leave = GameSession.I.Nakama.LeaveMatchKeepSocketAsync();
                     while (!leave.IsCompleted)
                         yield return null;
                 }

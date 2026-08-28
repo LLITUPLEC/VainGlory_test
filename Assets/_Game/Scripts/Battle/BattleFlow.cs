@@ -106,6 +106,7 @@ namespace Ashfold
                 _hud.SetSurrender(Surrender);
                 if (_networked)
                     _hud.SetHint(Loc.T("hud.hint_net"));
+                TutorialCoach.TryStartBattle();
             }
 
             if (_networked)

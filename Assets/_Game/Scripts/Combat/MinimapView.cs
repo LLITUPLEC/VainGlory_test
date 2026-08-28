@@ -118,12 +118,8 @@ namespace Ashfold
                 {
                     // Враги в кусте не на миникарте.
                     var brush = BrushZone.FindAt(u.transform.position);
-                    if (brush != null)
-                    {
-                        var player = BattleRuntime.I != null ? BattleRuntime.I.Player : null;
-                        if (player == null || BrushZone.FindAt(player.transform.position) != brush)
-                            continue;
-                    }
+                    if (brush != null && BrushStealth.HiddenFromLocal(u))
+                        continue;
                     color = GameTheme.Crimson;
                     size = 9f;
                 }

@@ -13,6 +13,7 @@ namespace Ashfold
         {
             if (Hero == null || Unit == null || !Unit.IsAlive)
                 return;
+            Hero.EnsureControlIfAlive();
             if (Hero.Motor != null && Hero.Motor.Locked)
                 return;
             if (QPressed())
@@ -21,10 +22,9 @@ namespace Ashfold
                 FountainShop.Open(Hero);
             if (PressedKey(UnityEngine.InputSystem.Key.R))
                 Hero.TryRecall();
-            if (OverUi())
-                return;
-
             if (!Pressed())
+                return;
+            if (OverUi())
                 return;
 
             var cam = Camera.main;
@@ -92,16 +92,26 @@ namespace Ashfold
 
         static Vector2 PointerScreen()
         {
-            if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+            if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.isPressed)
+                return Touchscreen.current.primaryTouch.position.ReadValue();
+            if (Mouse.current != null)
                 return Mouse.current.position.ReadValue();
             if (Touchscreen.current != null)
                 return Touchscreen.current.primaryTouch.position.ReadValue();
             return Vector2.zero;
         }
 
+        static readonly System.Collections.Generic.List<RaycastResult> UiHits = new System.Collections.Generic.List<RaycastResult>(8);
+
         static bool OverUi()
         {
-            return EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+            var es = EventSystem.current;
+            if (es == null)
+                return false;
+            var ped = new PointerEventData(es) { position = PointerScreen() };
+            UiHits.Clear();
+            es.RaycastAll(ped, UiHits);
+            return UiHits.Count > 0;
         }
 
         static bool PlanePoint(Ray ray, out Vector3 point)

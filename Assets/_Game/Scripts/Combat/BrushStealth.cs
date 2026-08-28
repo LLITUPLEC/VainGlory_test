@@ -2,7 +2,8 @@ using UnityEngine;
 
 namespace Ashfold
 {
-    /// <summary>Куст: враги внутри невидимы, пока союзник не зашёл в тот же куст.</summary>
+    /// <summary>Куст: враги внутри невидимы, пока союзник не зашёл в тот же куст.
+    /// После боя с героем невидимость включается только спустя 2 с без геройского урона.</summary>
     public sealed class BrushZone : MonoBehaviour
     {
         public static BrushZone[] All = System.Array.Empty<BrushZone>();
@@ -61,23 +62,25 @@ namespace Ashfold
             if (Unit == null || !Unit.IsAlive)
                 return; // смерть/респаун сами управляют рендерами
 
+            SetHidden(HiddenFromLocal(Unit));
+        }
+
+        public static bool HiddenFromLocal(CombatUnit unit)
+        {
+            if (unit == null || !unit.IsAlive)
+                return false;
             var player = BattleRuntime.I != null ? BattleRuntime.I.Player : null;
-            if (player == null || Unit.IsPlayer || Unit.Team == player.Team)
-            {
-                SetHidden(false);
-                return;
-            }
+            if (player == null || unit.IsPlayer || unit.Team == player.Team)
+                return false;
 
-            var myBrush = BrushZone.FindAt(transform.position);
+            var myBrush = BrushZone.FindAt(unit.transform.position);
             if (myBrush == null)
-            {
-                SetHidden(false);
-                return;
-            }
-
-            var playerBrush = BrushZone.FindAt(player.transform.position);
-            var revealed = playerBrush == myBrush;
-            SetHidden(!revealed);
+                return false;
+            if (BrushZone.FindAt(player.transform.position) == myBrush)
+                return false;
+            if (unit.InHeroCombat)
+                return false;
+            return true;
         }
 
         void SetHidden(bool hidden)

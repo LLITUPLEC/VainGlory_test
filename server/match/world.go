@@ -321,13 +321,22 @@ func liveXZ(s *State, id int) (float64, float64, int, bool) {
 }
 
 func hurt(s *State, srcID, srcTeam int, srcHero bool, dmg float64, dstID int) {
+	hurtHit(s, srcID, srcTeam, srcHero, dmg, dstID, 0)
+}
+
+func hurtSkill(s *State, srcID, srcTeam int, srcHero bool, dmg float64, dstID int) {
+	hurtHit(s, srcID, srcTeam, srcHero, dmg, dstID, 1)
+}
+
+func hurtHit(s *State, srcID, srcTeam int, srcHero bool, dmg float64, dstID int, skill int) {
 	if dmg <= 0 {
 		return
 	}
 	kill := 0
 	if h := s.Heroes[dstID]; h != nil && h.Alive {
 		cancelRecall(h)
-		h.HP -= dmg
+		taken := dmg * (1 - clamp(h.Resist, 0, 0.9))
+		h.HP -= taken
 		if h.HP <= 0 {
 			h.HP = 0
 			h.Alive = false
@@ -343,7 +352,7 @@ func hurt(s *State, srcID, srcTeam int, srcHero bool, dmg float64, dstID int) {
 				}
 			}
 		}
-		s.Hits = append(s.Hits, hitEvent{Src: srcID, Dst: dstID, Dmg: dmg, Kill: kill})
+		s.Hits = append(s.Hits, hitEvent{Src: srcID, Dst: dstID, Dmg: taken, Kill: kill, Skill: skill})
 		return
 	}
 	u := s.Extras[dstID]
@@ -368,7 +377,7 @@ func hurt(s *State, srcID, srcTeam int, srcHero bool, dmg float64, dstID int) {
 			u.RespawnLeft = campRespawn
 		}
 	}
-	s.Hits = append(s.Hits, hitEvent{Src: srcID, Dst: dstID, Dmg: dmg, Kill: kill})
+	s.Hits = append(s.Hits, hitEvent{Src: srcID, Dst: dstID, Dmg: dmg, Kill: kill, Skill: skill})
 }
 
 func pruneMinions(s *State) {

@@ -62,13 +62,17 @@ type hero struct {
 	StunLeft     float64
 	Recalling    bool
 	RecallLeft   float64
+	Items        []string
+	Resist       float64
+	HealPower    float64
 }
 
 type hitEvent struct {
-	Src  int     `json:"src"`
-	Dst  int     `json:"dst"`
-	Dmg  float64 `json:"dmg"`
-	Kill int     `json:"kill"`
+	Src   int     `json:"src"`
+	Dst   int     `json:"dst"`
+	Dmg   float64 `json:"dmg"`
+	Kill  int     `json:"kill"`
+	Skill int     `json:"skill"`
 }
 
 type snapEntity struct {
@@ -94,6 +98,7 @@ type snapEntity struct {
 	StunLeft  float64 `json:"stunLeft"`
 	Recalling bool    `json:"recalling"`
 	RecallLeft float64 `json:"recallLeft"`
+	ItemsCsv   string  `json:"itemsCsv"`
 }
 
 type snapDTO struct {
@@ -175,6 +180,7 @@ func spawnHeroes(s *State) {
 			Ranged: def.Ranged,
 			Alive:  true,
 			Gold:   80,
+			Items:  make([]string, 0, maxItems),
 		}
 	}
 }
@@ -284,8 +290,6 @@ func applySkillInput(s *State, userId string, data []byte) {
 	def := resolveHero(h.HeroId)
 	cancelRecall(h)
 	h.SkillCd = def.SkillCD
-	h.HasMove = false
-	h.AttackTarget = 0
 	h.Yaw = dto.Yaw
 	switch h.HeroId {
 	case "vesper":
@@ -313,7 +317,7 @@ func castCone(s *State, h *hero, def heroDef) {
 		if !inSkillArc(h, t.X, t.Z, def.SkillRange, 55) {
 			continue
 		}
-		hurt(s, h.ID, h.Team, true, def.SkillPower, t.ID)
+		hurtSkill(s, h.ID, h.Team, true, scaledSkill(h, def), t.ID)
 		t.StunLeft = math.Max(t.StunLeft, 0.85)
 	}
 	for _, u := range s.Extras {
@@ -323,7 +327,7 @@ func castCone(s *State, h *hero, def heroDef) {
 		if !inSkillArc(h, u.X, u.Z, def.SkillRange, 55) {
 			continue
 		}
-		hurt(s, h.ID, h.Team, true, def.SkillPower, u.ID)
+		hurtSkill(s, h.ID, h.Team, true, scaledSkill(h, def), u.ID)
 	}
 }
 
@@ -349,7 +353,7 @@ func castBolt(s *State, h *hero, def heroDef) {
 		}
 	}
 	if best != 0 {
-		hurt(s, h.ID, h.Team, true, def.SkillPower, best)
+		hurtSkill(s, h.ID, h.Team, true, scaledSkill(h, def), best)
 	}
 }
 
@@ -362,10 +366,10 @@ func castNova(s *State, h *hero, def heroDef) {
 			continue
 		}
 		if t.Team == h.Team {
-			t.HP = math.Min(t.MaxHP, t.HP+def.SkillPower)
+			t.HP = math.Min(t.MaxHP, t.HP+scaledSkill(h, def))
 			continue
 		}
-		hurt(s, h.ID, h.Team, true, def.SkillPower*0.55, t.ID)
+		hurtSkill(s, h.ID, h.Team, true, scaledSkill(h, def)*0.55, t.ID)
 	}
 	for _, u := range s.Extras {
 		if u == nil || !u.Alive || u.Team == h.Team {
@@ -374,7 +378,7 @@ func castNova(s *State, h *hero, def heroDef) {
 		if dist(h.X, h.Z, u.X, u.Z) > def.SkillRange {
 			continue
 		}
-		hurt(s, h.ID, h.Team, true, def.SkillPower*0.55, u.ID)
+		hurtSkill(s, h.ID, h.Team, true, scaledSkill(h, def)*0.55, u.ID)
 	}
 }
 
@@ -466,10 +470,15 @@ func thinkBots(s *State) {
 			continue
 		}
 		ratio := h.HP / h.MaxHP
-		if inFountain(h) && ratio < recoverHp {
-			h.AttackTarget = 0
-			h.HasMove = false
-			continue
+		if inFountain(h) {
+			if len(h.Items) == 0 {
+				tryBuy(h, preferredItem(h.HeroId))
+			}
+			if ratio < recoverHp {
+				h.AttackTarget = 0
+				h.HasMove = false
+				continue
+			}
 		}
 		if ratio < retreatHp && !inFountain(h) {
 			h.AttackTarget = 0
@@ -522,6 +531,9 @@ func stepHero(s *State, h *hero) {
 	}
 	if inFountain(h) {
 		h.HP = math.Min(h.MaxHP, h.HP+h.MaxHP*0.22*dt)
+	}
+	if h.HealPower > 0 {
+		h.HP = math.Min(h.MaxHP, h.HP+6*h.HealPower*dt)
 	}
 
 	if h.StunLeft > 0 {
@@ -666,6 +678,7 @@ func snapshotPayload(s *State) []byte {
 			StunLeft:  h.StunLeft,
 			Recalling: h.Recalling,
 			RecallLeft: h.RecallLeft,
+			ItemsCsv:  itemsCsv(h),
 		})
 	}
 	ents = extraSnapshot(s, ents)

@@ -12,6 +12,12 @@ namespace Ashfold
         public static readonly Color GoldDim = Hex(0x8A7340);
         public static readonly Color Teal = Hex(0x3DCEC7);
         public static readonly Color Crimson = Hex(0xC44545);
+        public static readonly Color AllyHp = Hex(0x5EE0C8);
+        public static readonly Color AllyHpLow = Hex(0x2F9B6E);
+        public static readonly Color EnemyHp = Hex(0xF080A0);
+        public static readonly Color EnemyHpLow = Hex(0xC43B4A);
+        public static readonly Color DamageDealt = Hex(0xFFF3D6);
+        public static readonly Color DamageTaken = Hex(0xFF7A92);
         public static readonly Color Text = Hex(0xEDE6D6);
         public static readonly Color TextMuted = Hex(0x8B97A3);
         public static readonly Color Line = new Color(0.83f, 0.71f, 0.35f, 0.35f);

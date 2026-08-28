@@ -4,6 +4,7 @@ namespace Ashfold
     {
         public string UserId;
         public string DisplayName;
+        public string Username;
         public int Level = 1;
         public int Essence;
         public string AuthProvider = "dev-guest";

@@ -7,7 +7,7 @@ namespace Ashfold
     {
         public static void Open(HeroCombat hero)
         {
-            if (hero == null || hero.Unit == null || hero.ServerAuth)
+            if (hero == null || hero.Unit == null)
                 return;
             if (!FoldMapBuilder.InFountain(hero.transform.position, hero.Unit.Team))
                 return;

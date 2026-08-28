@@ -115,6 +115,11 @@ namespace Ashfold
             Send(NakamaConnection.OpInputRecall, JsonUtility.ToJson(new NetSeqDto { seq = NextSeq() }));
         }
 
+        public void SendBuy(string itemId)
+        {
+            Send(NakamaConnection.OpInputBuy, JsonUtility.ToJson(new NetBuyDto { itemId = itemId, seq = NextSeq() }));
+        }
+
         public void SendMapPing(float x, float z)
         {
             Send(NakamaConnection.OpMapPing, JsonUtility.ToJson(new NetPingDto { x = x, z = z }));

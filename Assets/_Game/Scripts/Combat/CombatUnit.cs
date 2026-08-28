@@ -28,12 +28,15 @@ namespace Ashfold
         public float Resist;
         public int NetId;
         public System.Action Damaged;
+        public float LastHeroCombatAt;
+        public const float HeroCombatReveal = 2f;
 
         public bool DisableOnDeath = true;
 
         public bool IsAlive => Hp > 0f && isActiveAndEnabled;
         public bool Stunned => Time.time < StunUntil;
         public float Hp01 => MaxHp <= 0f ? 0f : Mathf.Clamp01(Hp / MaxHp);
+        public bool InHeroCombat => LastHeroCombatAt > 0f && Time.time - LastHeroCombatAt < HeroCombatReveal;
 
         public System.Action<CombatUnit, CombatUnit> Killed;
 
@@ -71,13 +74,34 @@ namespace Ashfold
             StunUntil = Mathf.Max(StunUntil, Time.time + seconds);
         }
 
+        public static void MarkHeroFight(CombatUnit a, CombatUnit b)
+        {
+            if (a == null || b == null || a == b)
+                return;
+            if (!a.IsHero || !b.IsHero)
+                return;
+            if (a.Team == b.Team)
+                return;
+            var now = Time.time;
+            a.LastHeroCombatAt = now;
+            b.LastHeroCombatAt = now;
+        }
+
+        static bool NetBattle()
+        {
+            return GameSession.I != null && GameSession.I.Match != null && GameSession.I.Match.IsNetworked;
+        }
+
         public void ApplyDamage(float amount, CombatUnit source)
         {
             if (!IsAlive || amount <= 0f)
                 return;
+            MarkHeroFight(this, source);
             amount *= 1f - Mathf.Clamp01(Resist);
             Hp -= amount;
             Damaged?.Invoke();
+            if (!NetBattle())
+                DamagePopup.TryShow(this, source, amount);
             if (Hp > 0f)
                 return;
             Hp = 0f;

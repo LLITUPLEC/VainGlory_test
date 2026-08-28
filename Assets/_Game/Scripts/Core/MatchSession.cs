@@ -107,6 +107,7 @@ namespace Ashfold
         public float stunLeft;
         public bool recalling;
         public float recallLeft;
+        public string itemsCsv;
     }
 
     [Serializable]
@@ -116,6 +117,7 @@ namespace Ashfold
         public int dst;
         public float dmg;
         public int kill;
+        public int skill;
     }
 
     [Serializable]
@@ -137,6 +139,13 @@ namespace Ashfold
     public sealed class NetSkillDto
     {
         public float yaw;
+        public int seq;
+    }
+
+    [Serializable]
+    public sealed class NetBuyDto
+    {
+        public string itemId;
         public int seq;
     }
 

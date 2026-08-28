@@ -20,6 +20,7 @@ const (
 	OpInputAttack int64 = 34
 	OpInputStop  int64 = 35
 	OpInputRecall int64 = 36
+	OpInputBuy    int64 = 37
 	OpSurrender  int64 = 40
 	OpMapPing    int64 = 50
 )
@@ -48,6 +49,7 @@ type playerSlot struct {
 	Name     string
 	Team     int
 	Slot     int
+	Party    string
 }
 
 type rosterSlot struct {
@@ -65,6 +67,7 @@ type rosterSlot struct {
 type State struct {
 	Presences        map[string]*playerSlot
 	PendingNames     map[string]string
+	PendingParty     map[string]string
 	Roster           [6]*rosterSlot
 	Heroes           map[int]*hero
 	Extras           map[int]*ent
@@ -90,6 +93,7 @@ func (m *AshfoldMatch) MatchInit(ctx context.Context, logger runtime.Logger, db 
 	state := &State{
 		Presences:    make(map[string]*playerSlot),
 		PendingNames: make(map[string]string),
+		PendingParty: make(map[string]string),
 		Heroes:       make(map[int]*hero),
 		Extras:       make(map[int]*ent),
 		Hits:         make([]hitEvent, 0, 8),
@@ -127,6 +131,9 @@ func (m *AshfoldMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Logg
 	if name := metadata["name"]; name != "" {
 		s.PendingNames[presence.GetUserId()] = name
 	}
+	if pid := metadata["party"]; pid != "" {
+		s.PendingParty[presence.GetUserId()] = pid
+	}
 	return s, true, ""
 }
 
@@ -150,7 +157,15 @@ func (m *AshfoldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db 
 			continue
 		}
 		team := 0
-		if teamCount(s, 0) > teamCount(s, 1) {
+		partyId := s.PendingParty[p.GetUserId()]
+		delete(s.PendingParty, p.GetUserId())
+		if partyId != "" {
+			if t, ok := teamForParty(s, partyId); ok {
+				team = t
+			} else if teamCount(s, 0) >= 3 {
+				team = 1
+			}
+		} else if teamCount(s, 0) > teamCount(s, 1) {
 			team = 1
 		}
 		slot := nextSlot(s, team)
@@ -159,7 +174,7 @@ func (m *AshfoldMatch) MatchJoin(ctx context.Context, logger runtime.Logger, db 
 			name = p.GetUsername()
 		}
 		delete(s.PendingNames, p.GetUserId())
-		s.Presences[p.GetUserId()] = &playerSlot{Presence: p, Name: name, Team: team, Slot: slot}
+		s.Presences[p.GetUserId()] = &playerSlot{Presence: p, Name: name, Team: team, Slot: slot, Party: partyId}
 		logger.Info("join user=%s name=%s team=%d slot=%d count=%d", p.GetUserId(), name, team, slot, len(s.Presences))
 	}
 	dispatcher.BroadcastMessage(OpRoster, rosterPayload(s), nil, nil, true)
@@ -209,6 +224,8 @@ func (m *AshfoldMatch) MatchLoop(ctx context.Context, logger runtime.Logger, db 
 			applyStopInput(s, msg.GetUserId())
 		case OpInputRecall:
 			applyRecallInput(s, msg.GetUserId(), msg.GetData())
+		case OpInputBuy:
+			applyBuyInput(s, msg.GetUserId(), msg.GetData())
 		case OpSurrender:
 			if applySurrender(s, msg.GetUserId()) {
 				dispatcher.BroadcastMessage(OpSnapshot, snapshotPayload(s), nil, nil, true)
@@ -553,6 +570,18 @@ func teamCount(s *State, team int) int {
 		}
 	}
 	return n
+}
+
+func teamForParty(s *State, partyId string) (int, bool) {
+	if partyId == "" {
+		return 0, false
+	}
+	for _, p := range s.Presences {
+		if p != nil && p.Party == partyId {
+			return p.Team, true
+		}
+	}
+	return 0, false
 }
 
 func nextSlot(s *State, team int) int {

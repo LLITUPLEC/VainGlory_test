@@ -17,6 +17,8 @@ namespace Ashfold
         public float RecallT;
         public const float RecallDuration = 2.5f;
         public const int MaxItems = 6;
+        float _skillLockUntil;
+        float _buyLockUntil;
 
         public Vector3 FountainPos;
         public float ExtraDamage;
@@ -24,7 +26,10 @@ namespace Ashfold
         public float ExtraHeal;
         public float ExtraMove;
 
-        public bool SkillReady => SkillCd <= 0f && Unit != null && Unit.IsAlive && !Unit.Stunned && !Recalling;
+        public bool SkillReady =>
+            SkillCd <= 0f
+            && Time.unscaledTime >= _skillLockUntil
+            && Unit != null && Unit.IsAlive && !Unit.Stunned && !Recalling;
         public float AttackDamage => Def.Damage + ExtraDamage;
         public float AttackInterval => Def.AttackInterval / Mathf.Max(0.4f, 1f + ExtraAs);
         public float SkillPower => Def.SkillPower * (1f + ExtraHeal);
@@ -169,6 +174,8 @@ namespace Ashfold
             CancelRecall();
             AttackTarget = null;
             AttackCd = 0f;
+            SkillCd = 0f;
+            _skillLockUntil = 0f;
             if (Unit != null)
             {
                 Unit.Hp = Unit.MaxHp;
@@ -188,13 +195,30 @@ namespace Ashfold
                 col.enabled = true;
         }
 
+        public void EnsureControlIfAlive()
+        {
+            if (Unit == null || !Unit.IsAlive || Motor == null || !Motor.Locked)
+                return;
+            Motor.Locked = false;
+            Motor.StunUntil = 0f;
+            foreach (var r in GetComponentsInChildren<Renderer>(true))
+                r.enabled = true;
+            var col = GetComponent<Collider>();
+            if (col != null)
+                col.enabled = true;
+        }
+
         void PredictLocal()
         {
+            EnsureControlIfAlive();
             SkillCd -= Time.deltaTime;
             if (Unit.Stunned)
             {
                 if (Motor != null)
+                {
+                    Motor.StunUntil = Unit.StunUntil;
                     Motor.Stop();
+                }
                 Recalling = false;
                 return;
             }
@@ -228,10 +252,10 @@ namespace Ashfold
             if (!SkillReady)
                 return false;
             CancelRecall();
-            SkillCd = Def.SkillCooldown;
-
-            if (AttackTarget != null && AttackTarget.IsAlive && Motor != null)
-                Motor.Face(AttackTarget.transform.position);
+            var cd = Def != null ? Mathf.Max(0.35f, Def.SkillCooldown) : 8f;
+            SkillCd = cd;
+            _skillLockUntil = Time.unscaledTime + cd;
+            SnapFaceToTarget();
 
             if (ServerAuth)
             {
@@ -245,17 +269,77 @@ namespace Ashfold
             return true;
         }
 
+        void SnapFaceToTarget()
+        {
+            if (AttackTarget == null || !AttackTarget.IsAlive)
+                return;
+            var to = AttackTarget.transform.position - transform.position;
+            to.y = 0f;
+            if (to.sqrMagnitude > 0.01f)
+                transform.rotation = Quaternion.LookRotation(to);
+        }
+
         public bool TryBuy(ItemDef item)
         {
-            if (ServerAuth)
+            if (item == null || BattleRuntime.I == null || Unit == null)
                 return false;
-            if (BattleRuntime.I == null)
+            if (Items.Count >= MaxItems)
+                return false;
+            if (!FoldMapBuilder.InFountain(transform.position, Unit.Team))
                 return false;
             if (BattleRuntime.I.Gold < item.Cost)
                 return false;
-            if (!TryBuyFree(item))
+            if (ServerAuth && Time.unscaledTime < _buyLockUntil)
                 return false;
+
+            Items.Add(item.Id);
             BattleRuntime.I.Gold -= item.Cost;
+            ApplyItems();
+            if (ServerAuth)
+            {
+                _buyLockUntil = Time.unscaledTime + 0.45f;
+                if (GameSession.I != null && GameSession.I.MatchClient != null)
+                    GameSession.I.MatchClient.SendBuy(item.Id);
+            }
+            return true;
+        }
+
+        public void ApplyItemsCsv(string csv)
+        {
+            if (ServerAuth && Time.unscaledTime < _buyLockUntil)
+                return;
+            var next = ParseItemCsv(csv);
+            if (SameItems(next))
+                return;
+            Items.Clear();
+            Items.AddRange(next);
+            ApplyItems();
+        }
+
+        static List<string> ParseItemCsv(string csv)
+        {
+            var list = new List<string>(6);
+            if (string.IsNullOrEmpty(csv))
+                return list;
+            var parts = csv.Split(',');
+            for (var i = 0; i < parts.Length; i++)
+            {
+                var id = parts[i].Trim();
+                if (id.Length > 0)
+                    list.Add(id);
+            }
+            return list;
+        }
+
+        bool SameItems(List<string> other)
+        {
+            if (other == null || other.Count != Items.Count)
+                return false;
+            for (var i = 0; i < Items.Count; i++)
+            {
+                if (Items[i] != other[i])
+                    return false;
+            }
             return true;
         }
 

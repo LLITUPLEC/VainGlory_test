@@ -171,6 +171,33 @@ namespace Ashfold
             Add("hall.stage_dev", "STAGE 2.1  ·  HALL", "ЭТАП 2.1  ·  ХОЛЛ");
             Add("hall.friends_toast", "Friends — stage 7 (Nakama)", "Друзья — этап 7 (Nakama)");
 
+            Add("social.title", "FRIENDS  ·  PARTY", "ДРУЗЬЯ  ·  ПАТИ");
+            Add("social.close", "CLOSE", "ЗАКРЫТЬ");
+            Add("social.need_nakama", "Friends and party need Nakama (UseServer=true).", "Друзья и пати нужны Nakama (UseServer=true).");
+            Add("social.add", "ADD", "ДОБАВИТЬ");
+            Add("social.username_ph", "Username", "Ник в Nakama");
+            Add("social.you", "Your username:  {0}", "Ваш ник:  {0}");
+            Add("social.friends", "FRIENDS", "ДРУЗЬЯ");
+            Add("social.party", "PARTY  ·  MAX 3", "ПАТИ  ·  ДО 3");
+            Add("social.create", "CREATE", "СОЗДАТЬ");
+            Add("social.leave", "LEAVE", "ВЫЙТИ");
+            Add("social.invite", "INVITE", "ПРИГЛ.");
+            Add("social.accept", "ACCEPT", "ПРИНЯТЬ");
+            Add("social.join", "JOIN", "ВОЙТИ");
+            Add("social.dismiss", "NO", "НЕТ");
+            Add("social.invited", "Party invite", "Приглашение в пати");
+            Add("social.chat_ph", "Party chat", "Чат пати");
+            Add("social.send", "SEND", "ОК");
+            Add("social.empty", "No friends yet. Add by username.", "Пока нет друзей. Добавьте по нику.");
+            Add("social.party_empty", "Not in a party. Create one, then invite.", "Нет пати. Создайте и пригласите.");
+            Add("social.leader", "LEAD", "ЛИДЕР");
+            Add("social.you_tag", "YOU · ", "ВЫ · ");
+            Add("social.leader_queues", "Only the party leader can queue Casual.", "В очередь Casual встаёт только лидер пати.");
+            Add("social.queue_party", "Casual 3v3\nQueuing as a party…", "Обычный 3v3\nОчередь пати…");
+            Add("social.sent", "sent", "исходящая");
+            Add("social.recv", "incoming", "входящая");
+            Add("social.blocked", "blocked", "блок");
+
             Add("account.title", "ACCOUNT", "АККАУНТ");
             Add("account.close", "CLOSE", "ЗАКРЫТЬ");
             Add("account.email_none", "not linked", "не привязан");
@@ -222,7 +249,7 @@ namespace Ashfold
             Add("mode.casual_btn", "CASUAL  3v3", "ОБЫЧНЫЙ  3v3");
             Add("mode.solo_btn", "SOLO  ·  BOTS", "СОЛО  ·  БОТЫ");
             Add("mode.hint", "Lane + jungle  ·  one turret  ·  crystal\nOffline queue (DevAuth)", "Линия + лес  ·  одна турель  ·  кристалл\nОфлайн-очередь (DevAuth)");
-            Add("mode.hint_nakama", "Casual waits for a second player, then fills bots.\nSolo is offline vs bots.", "Обычный ждёт второго игрока, затем добор ботами.\nСоло — офлайн против ботов.");
+            Add("mode.hint_nakama", "Casual waits for a second player, then fills bots.\nParty of 2–3 queues together (leader presses PLAY).\nSolo is offline vs bots.", "Обычный ждёт второго игрока, затем добор ботами.\nПати 2–3 встаёт в очередь вместе (PLAY жмёт лидер).\nСоло — офлайн против ботов.");
             Add("mode.back", "BACK", "НАЗАД");
             Add("mode.casual", "Casual 3v3", "Обычный 3v3");
             Add("map.ashfold", "Ashfold Lane", "Линия Ashfold");
@@ -274,9 +301,18 @@ namespace Ashfold
             Add("hud.shop_fountain", "Shop only at fountain  ·  R to recall", "Магазин только у фонтана  ·  R для возврата");
             Add("hud.recalling", "Recalling…  {0:0.0}s", "Возврат…  {0:0.0}с");
             Add("hud.fountain", "FOUNTAIN  ·  B shop  ·  Q skill", "ФОНТАН  ·  B магазин  ·  Q умение");
-            Add("hud.stage", "STAGE 6.3  ·  MAP PING", "ЭТАП 6.3  ·  ПИНГ ПО КАРТЕ");
+            Add("hud.stage", "STAGE 6.5  ·  TUTORIAL", "ЭТАП 6.5  ·  ТУТОРИАЛ");
             Add("shop.fountain", "FOUNTAIN SHOP  ·  {0} G", "МАГАЗИН ФОНТАНА  ·  {0} G");
             Add("shop.close", "CLOSE", "ЗАКРЫТЬ");
+
+            Add("tut.skip", "SKIP", "ПРОПУСТИТЬ");
+            Add("tut.hall", "PLAY — Casual 3v3. Pick a hero, then fight on the lane.", "PLAY — обычный 3v3. Выбери героя и выходи на линию.");
+            Add("tut.move", "Tap the ground to move.", "Нажми на землю, чтобы идти.");
+            Add("tut.attack", "Tap an enemy to attack.", "Нажми на врага, чтобы атаковать.");
+            Add("tut.skill", "Q — your ability. Wait for the cooldown.", "Q — умение. Жди перезарядку.");
+            Add("tut.shop", "Spend gold at the fountain (B / Shop). R recalls you home.", "Золото тратится у фонтана (B / Магазин). R — возврат на базу.");
+            Add("tut.brush", "Bushes hide you from enemies. After a hero fight you stay visible 2s.", "Кусты скрывают от врагов. После боя с героем ты виден ещё 2 с.");
+            Add("tut.ping", "Ping the minimap so allies see the call. Break the crystal to win.", "Пинг по миникарте виден союзникам. Сломай кристалл — победа.");
         }
 
         static void Add(string key, string en, string ru)

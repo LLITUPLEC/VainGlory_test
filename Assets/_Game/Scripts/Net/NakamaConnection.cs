@@ -17,6 +17,7 @@ namespace Ashfold
         public IMatch CurrentMatch { get; private set; }
         public string MatchId { get; private set; }
         public string MatchmakerTicket { get; private set; }
+        public string PartyMatchmakerTicket { get; private set; }
         public IClient Client { get; private set; }
         public ISession Session { get; private set; }
         public bool IsConnected => Session != null && !Session.HasExpired(DateTime.UtcNow);
@@ -29,6 +30,7 @@ namespace Ashfold
         public const long OpDraftLock = 33;
         public const long OpInputAttack = 34;
         public const long OpInputRecall = 36;
+        public const long OpInputBuy = 37;
         public const long OpSurrender = 40;
         public const long OpMapPing = 50;
 
@@ -183,15 +185,13 @@ namespace Ashfold
                 throw new InvalidOperationException("Nakama session missing");
             if (Socket != null && Socket.IsConnected)
             {
-                if (GameSession.I != null && GameSession.I.MatchClient != null)
-                    GameSession.I.MatchClient.Attach(Socket);
+                BindRealtime();
                 return;
             }
             await CloseSocketKeepMatchAsync();
             Socket = Client.NewSocket();
             await Socket.ConnectAsync(Session, true);
-            if (GameSession.I != null && GameSession.I.MatchClient != null)
-                GameSession.I.MatchClient.Attach(Socket);
+            BindRealtime();
             Debug.Log("[Ashfold] Realtime socket connected");
         }
 
@@ -223,11 +223,14 @@ namespace Ashfold
                 ? GameSession.I.Profile.DisplayName
                 : "Player";
             var meta = new Dictionary<string, string> { { "name", name } };
+            if (GameSession.I != null && GameSession.I.Social != null && GameSession.I.Social.InParty)
+                meta["party"] = GameSession.I.Social.PartyId;
             if (!string.IsNullOrEmpty(matched.MatchId))
                 CurrentMatch = await Socket.JoinMatchAsync(matched.MatchId, meta);
             else
                 CurrentMatch = await Socket.JoinMatchAsync(matched);
             MatchmakerTicket = null;
+            PartyMatchmakerTicket = null;
             Debug.Log("[Ashfold] Joined match " + CurrentMatch.Id);
             MatchId = CurrentMatch.Id;
         }
@@ -242,13 +245,86 @@ namespace Ashfold
                 ? GameSession.I.Profile.DisplayName
                 : "Player";
             var meta = new Dictionary<string, string> { { "name", name } };
+            if (GameSession.I != null && GameSession.I.Social != null && GameSession.I.Social.InParty)
+                meta["party"] = GameSession.I.Social.PartyId;
             CurrentMatch = await Socket.JoinMatchAsync(matchId, meta);
             MatchId = CurrentMatch.Id;
             Debug.Log("[Ashfold] Rejoined match " + CurrentMatch.Id);
         }
 
+        public async Task AddMatchmakerPartyAsync(string partyId, int partySize)
+        {
+            if (Socket == null || !Socket.IsConnected)
+                await ConnectRealtimeAsync();
+            var name = GameSession.I != null && GameSession.I.Profile != null
+                ? GameSession.I.Profile.DisplayName
+                : "Player";
+            var n = Mathf.Clamp(partySize, 2, NakamaSocial.PartyMax);
+            var ticket = await Socket.AddMatchmakerPartyAsync(
+                partyId,
+                "properties.mode:casual_3v3",
+                n,
+                n,
+                new Dictionary<string, string>
+                {
+                    { "mode", "casual_3v3" },
+                    { "name", name }
+                });
+            PartyMatchmakerTicket = ticket.Ticket;
+            MatchmakerTicket = null;
+            Debug.Log("[Ashfold] Party matchmaker ticket " + PartyMatchmakerTicket + " size=" + n);
+        }
+
+        public async Task CancelMatchmakerAsync()
+        {
+            var socket = Socket;
+            var ticket = MatchmakerTicket;
+            var partyTicket = PartyMatchmakerTicket;
+            var partyId = GameSession.I != null && GameSession.I.Social != null
+                ? GameSession.I.Social.PartyId
+                : "";
+            MatchmakerTicket = null;
+            PartyMatchmakerTicket = null;
+            if (socket == null || !socket.IsConnected)
+                return;
+            try
+            {
+                if (!string.IsNullOrEmpty(partyTicket) && !string.IsNullOrEmpty(partyId))
+                    await socket.RemoveMatchmakerPartyAsync(partyId, partyTicket);
+                else if (!string.IsNullOrEmpty(ticket))
+                    await socket.RemoveMatchmakerAsync(ticket);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Ashfold] Cancel matchmaker: " + e.Message);
+            }
+        }
+
+        public async Task LeaveMatchKeepSocketAsync()
+        {
+            if (GameSession.I != null && GameSession.I.MatchClient != null)
+                GameSession.I.MatchClient.Detach();
+            var match = CurrentMatch;
+            var matchId = match != null ? match.Id : MatchId;
+            var socket = Socket;
+            CurrentMatch = null;
+            MatchId = null;
+            await CancelMatchmakerAsync();
+            if (socket == null || !socket.IsConnected || string.IsNullOrEmpty(matchId))
+                return;
+            try
+            {
+                await socket.LeaveMatchAsync(matchId);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Ashfold] Leave match keep socket: " + e.Message);
+            }
+        }
+
         public async Task CloseSocketKeepMatchAsync()
         {
+            UnbindSocial();
             if (GameSession.I != null && GameSession.I.MatchClient != null)
                 GameSession.I.MatchClient.Detach();
             var socket = Socket;
@@ -268,13 +344,19 @@ namespace Ashfold
 
         public async Task DisconnectRealtimeAsync()
         {
+            UnbindSocial();
             if (GameSession.I != null && GameSession.I.MatchClient != null)
                 GameSession.I.MatchClient.Detach();
             var ticket = MatchmakerTicket;
+            var partyTicket = PartyMatchmakerTicket;
+            var partyId = GameSession.I != null && GameSession.I.Social != null
+                ? GameSession.I.Social.PartyId
+                : "";
             var match = CurrentMatch;
             var matchId = match != null ? match.Id : MatchId;
             var socket = Socket;
             MatchmakerTicket = null;
+            PartyMatchmakerTicket = null;
             CurrentMatch = null;
             MatchId = null;
             Socket = null;
@@ -284,7 +366,9 @@ namespace Ashfold
             {
                 if (socket.IsConnected)
                 {
-                    if (!string.IsNullOrEmpty(ticket))
+                    if (!string.IsNullOrEmpty(partyTicket) && !string.IsNullOrEmpty(partyId))
+                        await socket.RemoveMatchmakerPartyAsync(partyId, partyTicket);
+                    else if (!string.IsNullOrEmpty(ticket))
                         await socket.RemoveMatchmakerAsync(ticket);
                     if (!string.IsNullOrEmpty(matchId))
                         await socket.LeaveMatchAsync(matchId);
@@ -295,6 +379,20 @@ namespace Ashfold
             {
                 Debug.LogWarning("[Ashfold] Realtime close: " + e.Message);
             }
+        }
+
+        void BindRealtime()
+        {
+            if (GameSession.I != null && GameSession.I.MatchClient != null)
+                GameSession.I.MatchClient.Attach(Socket);
+            if (GameSession.I != null && GameSession.I.Social != null)
+                GameSession.I.Social.Bind(Socket);
+        }
+
+        static void UnbindSocial()
+        {
+            if (GameSession.I != null && GameSession.I.Social != null)
+                GameSession.I.Social.Unbind();
         }
 
         public void ClearSession()

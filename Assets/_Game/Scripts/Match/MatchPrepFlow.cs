@@ -26,6 +26,9 @@ namespace Ashfold
         bool _locked;
         bool _queueCancelled;
         IMatchmakerMatched _matched;
+        bool _partyMemberWait;
+
+        public static bool Queuing { get; private set; }
 
         public void OpenModeSelect()
         {
@@ -62,10 +65,29 @@ namespace Ashfold
 
         void StartCasualQueue()
         {
+            var social = GameSession.I != null ? GameSession.I.Social : null;
+            if (NakamaConfig.UseServer && social != null && social.InParty && !social.IsLeader)
+            {
+                ShowPartyHint(Loc.T("social.leader_queues"));
+                return;
+            }
             if (NakamaConfig.UseServer)
                 StartNakamaQueue();
             else
                 StartLocalQueue();
+        }
+
+        void ShowPartyHint(string msg)
+        {
+            CloseOverlay();
+            var canvas = AppUi.OverlayCanvas("PartyHint");
+            _overlay = canvas.gameObject;
+            UiFactory.Panel(canvas.transform, GameTheme.Hex(0x000000, 0.78f), "Dim");
+            var sheet = UiFactory.Box(canvas.transform, new Vector2(0.28f, 0.36f), new Vector2(0.72f, 0.64f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Sheet");
+            UiFactory.Label(sheet.transform, msg, 20, GameTheme.Text, TextAnchor.MiddleCenter, FontStyle.Normal, true);
+            var ok = UiFactory.Button(sheet.transform, Loc.T("social.close"), CloseOverlay, GameTheme.Gold, GameTheme.Bg);
+            UiFactory.SetAnchors(ok.GetComponent<RectTransform>(), new Vector2(0.25f, 0.10f), new Vector2(0.75f, 0.32f), Vector2.zero, Vector2.zero);
+            ok.GetComponentInChildren<Text>().fontSize = 18;
         }
 
         void StartLocalQueue()
@@ -102,9 +124,12 @@ namespace Ashfold
 
         IEnumerator NakamaQueueRoutine()
         {
+            Queuing = true;
             _queueCancelled = false;
             _matched = null;
+            _partyMemberWait = false;
             var nk = GameSession.I.Nakama;
+            var social = GameSession.I.Social;
             if (_status != null)
                 _status.text = Loc.T("queue.connecting");
 
@@ -121,7 +146,19 @@ namespace Ashfold
 
             nk.Socket.ReceivedMatchmakerMatched += OnMatched;
 
-            var add = nk.AddMatchmakerAsync();
+            var partyQueue = social != null && social.InParty && social.IsLeader && social.PartySize >= 2;
+            System.Threading.Tasks.Task add;
+            if (partyQueue)
+            {
+                if (_status != null)
+                    _status.text = Loc.T("social.queue_party");
+                add = nk.AddMatchmakerPartyAsync(social.PartyId, social.PartySize);
+                var cue = social.NotifyQueueAsync(true);
+                while (!cue.IsCompleted)
+                    yield return null;
+            }
+            else
+                add = nk.AddMatchmakerAsync();
             while (!add.IsCompleted)
                 yield return null;
             if (_queueCancelled)
@@ -136,11 +173,79 @@ namespace Ashfold
                 yield break;
             }
 
+            yield return WaitJoinAndDraft(nk);
+        }
+
+        public void JoinIncomingMatch(IMatchmakerMatched matched)
+        {
+            if (matched == null)
+                return;
+            _matched = matched;
+            if (Queuing)
+                return;
+            CloseOverlay();
+            BuildQueue();
+            _routine = StartCoroutine(JoinIncomingRoutine());
+        }
+
+        public void WaitAsPartyMember()
+        {
+            if (Queuing)
+                return;
+            CloseOverlay();
+            BuildQueue();
+            if (_status != null)
+                _status.text = Loc.T("social.queue_party");
+            _routine = StartCoroutine(PartyMemberWaitRoutine());
+        }
+
+        public void CancelFromPartyLeader()
+        {
+            if (!Queuing || !_partyMemberWait)
+                return;
+            _queueCancelled = true;
+            Queuing = false;
+            UnhookMatchmaker();
+            if (_routine != null)
+                StopCoroutine(_routine);
+            _routine = null;
+            CloseOverlay();
+        }
+
+        IEnumerator JoinIncomingRoutine()
+        {
+            Queuing = true;
+            _queueCancelled = false;
+            _partyMemberWait = false;
+            var nk = GameSession.I.Nakama;
+            if (nk.Socket != null)
+                nk.Socket.ReceivedMatchmakerMatched += OnMatched;
+            yield return WaitJoinAndDraft(nk);
+        }
+
+        IEnumerator PartyMemberWaitRoutine()
+        {
+            Queuing = true;
+            _queueCancelled = false;
+            _partyMemberWait = true;
+            var nk = GameSession.I.Nakama;
+            if (nk != null && nk.Socket != null)
+                nk.Socket.ReceivedMatchmakerMatched += OnMatched;
+            yield return WaitJoinAndDraft(nk);
+        }
+
+        IEnumerator WaitJoinAndDraft(NakamaConnection nk)
+        {
+            if (nk == null)
+            {
+                Queuing = false;
+                yield break;
+            }
             var t = 0f;
             while (_matched == null && !_queueCancelled)
             {
                 t += Time.deltaTime;
-                if (_status != null)
+                if (_status != null && !_partyMemberWait)
                     _status.text = Loc.T("queue.waiting", Mathf.FloorToInt(t));
                 yield return null;
             }
@@ -184,6 +289,7 @@ namespace Ashfold
             Debug.Log("[Ashfold] Match room " + (nk.CurrentMatch != null ? nk.CurrentMatch.Id : "") +
                       " humans=" + (GameSession.I.Match != null ? GameSession.I.Match.Players.Count : 0));
 
+            Queuing = false;
             ShowMatchFound();
             yield return new WaitForSeconds(FoundSeconds);
             OpenDraft();
@@ -218,6 +324,7 @@ namespace Ashfold
 
         void ShowQueueError(System.AggregateException ex)
         {
+            Queuing = false;
             var msg = ex != null && ex.GetBaseException() != null ? ex.GetBaseException().Message : "queue failed";
             Debug.LogError("[Ashfold] Queue failed: " + msg);
             if (_status != null)
@@ -285,14 +392,29 @@ namespace Ashfold
         void CancelQueue()
         {
             _queueCancelled = true;
+            Queuing = false;
             UnhookMatchmaker();
             if (_routine != null)
                 StopCoroutine(_routine);
             _routine = null;
             GameSession.I.Match = null;
-            if (GameSession.I != null && GameSession.I.Nakama != null)
+            var social = GameSession.I != null ? GameSession.I.Social : null;
+            var nk = GameSession.I != null ? GameSession.I.Nakama : null;
+            if (social != null && social.InParty && social.IsLeader)
             {
-                var _ = GameSession.I.Nakama.DisconnectRealtimeAsync();
+                var _ = social.NotifyQueueAsync(false);
+                if (nk != null)
+                {
+                    var __ = nk.CancelMatchmakerAsync();
+                }
+            }
+            else if (social != null && social.InParty)
+            {
+                var _ = social.LeavePartyAsync();
+            }
+            else if (nk != null)
+            {
+                var _ = nk.CancelMatchmakerAsync();
             }
             CloseOverlay();
         }
@@ -622,6 +744,7 @@ namespace Ashfold
 
         void OnDestroy()
         {
+            Queuing = false;
             CloseOverlay();
         }
     }

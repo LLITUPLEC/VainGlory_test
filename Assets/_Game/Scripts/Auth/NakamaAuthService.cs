@@ -87,6 +87,7 @@ namespace Ashfold
         {
             var session = _conn.Session;
             var name = PlayerPrefs.GetString(KeyName, session.Username);
+            var username = session.Username ?? "";
             var email = "";
             var provider = "nakama-device";
 
@@ -99,6 +100,8 @@ namespace Ashfold
                         name = account.User.DisplayName;
                     else if (!string.IsNullOrEmpty(account.User.Username))
                         name = account.User.Username;
+                    if (!string.IsNullOrEmpty(account.User.Username))
+                        username = account.User.Username;
                 }
                 if (!string.IsNullOrEmpty(account?.Email))
                 {
@@ -119,6 +122,7 @@ namespace Ashfold
             {
                 UserId = session.UserId,
                 DisplayName = name,
+                Username = username,
                 Level = 1,
                 Essence = 0,
                 AuthProvider = provider,

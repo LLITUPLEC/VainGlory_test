@@ -97,6 +97,7 @@ namespace Ashfold
             colors.pressedColor = Color.Lerp(bg, Color.black, 0.2f);
             colors.disabledColor = new Color(bg.r, bg.g, bg.b, 0.35f);
             btn.colors = colors;
+            btn.navigation = new Navigation { mode = Navigation.Mode.None };
             btn.onClick.AddListener(onClick);
             Label(go.transform, caption, 28, fg, TextAnchor.MiddleCenter, FontStyle.Bold);
             return btn;

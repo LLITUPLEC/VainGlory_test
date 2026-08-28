@@ -59,6 +59,7 @@ namespace Ashfold
                 transform.rotation = Quaternion.LookRotation(transform.position - cam.transform.position);
 
             _fill.fillAmount = _unit.IsAlive ? _unit.Hp01 : 0f;
+            _fill.color = FillColor(_unit);
         }
 
         static Image MakeImage(Transform parent, string name, Sprite sprite, Color color, Vector2 aMin, Vector2 aMax)
@@ -79,11 +80,20 @@ namespace Ashfold
 
         static Color FillColor(CombatUnit unit)
         {
-            if (unit.Team == TeamId.Dawn)
-                return GameTheme.Teal;
-            if (unit.Team == TeamId.Dusk)
-                return GameTheme.Crimson;
-            return GameTheme.Gold;
+            var t = unit != null && unit.IsAlive ? unit.Hp01 : 0f;
+            if (AllyToLocal(unit))
+                return Color.Lerp(GameTheme.AllyHpLow, GameTheme.AllyHp, t);
+            return Color.Lerp(GameTheme.EnemyHpLow, GameTheme.EnemyHp, t);
+        }
+
+        public static bool AllyToLocal(CombatUnit unit)
+        {
+            if (unit == null || unit.Team == TeamId.Neutral)
+                return false;
+            var me = BattleRuntime.I != null ? BattleRuntime.I.Player : null;
+            if (me == null)
+                return unit.Team == TeamId.Dawn;
+            return unit.Team == me.Team;
         }
 
         static Sprite WhiteSprite()

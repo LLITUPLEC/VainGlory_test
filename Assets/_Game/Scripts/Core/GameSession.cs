@@ -13,6 +13,7 @@ namespace Ashfold
         public IAuthService Auth { get; private set; }
         public NakamaConnection Nakama { get; private set; }
         public NakamaMatchClient MatchClient { get; private set; }
+        public NakamaSocial Social { get; private set; }
         public PlayerProfile Profile { get; private set; }
         public bool IsAuthenticated => Profile != null;
         public string ShowcaseHeroId = "bastion";
@@ -40,6 +41,7 @@ namespace Ashfold
             I = this;
             Nakama = new NakamaConnection();
             MatchClient = gameObject.GetComponent<NakamaMatchClient>() ?? gameObject.AddComponent<NakamaMatchClient>();
+            Social = gameObject.GetComponent<NakamaSocial>() ?? gameObject.AddComponent<NakamaSocial>();
             if (NakamaConfig.UseServer)
             {
                 Auth = new NakamaAuthService(Nakama);
@@ -93,6 +95,8 @@ namespace Ashfold
 
         public void SignOut()
         {
+            if (Social != null)
+                Social.ResetLocal();
             if (Nakama != null)
             {
                 var _ = Nakama.DisconnectRealtimeAsync();

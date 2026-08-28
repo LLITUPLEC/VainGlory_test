@@ -143,8 +143,12 @@ namespace Ashfold
 
         void OnSkill()
         {
-            if (!_dead && Combat != null)
-                Combat.TryCastSkill();
+            if (_dead || Combat == null)
+                return;
+            if (!Combat.TryCastSkill())
+                return;
+            if (_skillBtn != null)
+                _skillBtn.interactable = false;
         }
 
         void OnShop()
@@ -171,9 +175,15 @@ namespace Ashfold
                 return;
             var def = Combat.Def;
             if (_dead)
+            {
                 _hp.text = def.DisplayName.ToUpperInvariant() + "\n" + Loc.T("hud.dead");
+                _hp.color = GameTheme.TextMuted;
+            }
             else
+            {
                 _hp.text = def.DisplayName.ToUpperInvariant() + "\n" + Mathf.CeilToInt(Player.Hp) + " / " + Mathf.CeilToInt(Player.MaxHp);
+                _hp.color = Color.Lerp(GameTheme.AllyHpLow, GameTheme.AllyHp, Player.Hp01);
+            }
 
             var assists = 0;
             if (MatchStatsTracker.I != null && MatchStatsTracker.I.ByUnit.TryGetValue(Player, out var row))

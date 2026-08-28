@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 namespace Ashfold
 {
-    /// <summary>Hall: мета Nakama без боевого матча. Сокет матча открывается только в очереди (этап 5.7).</summary>
+    /// <summary>Hall: мета Nakama. Realtime-сокет для друзей/пати; боевой матч — только после Match Found.</summary>
     public sealed class HallFlow : MonoBehaviour
     {
         Text _showcaseName;
@@ -27,8 +27,18 @@ namespace Ashfold
         {
             Build();
             RefreshShowcase(false);
+            TutorialCoach.TryShowHall();
             if (Loc.ConsumeReopenAccount())
                 HallAccount.Open(this, RefreshProfile);
+            var social = GameSession.I != null ? GameSession.I.Social : null;
+            if (social != null)
+            {
+                social.Matched += OnSocialMatched;
+                social.QueueStarted += OnSocialQueueStarted;
+                social.QueueStopped += OnSocialQueueStopped;
+            }
+            if (NakamaConfig.UseServer)
+                StartCoroutine(ConnectMetaSocket());
         }
 
         void Build()
@@ -61,7 +71,7 @@ namespace Ashfold
 
             BuildNav(root, 0.04f, Loc.T("hall.heroes"), () => HallCatalog.OpenHeroes(RefreshShowcase));
             BuildNav(root, 0.22f, Loc.T("hall.shop"), HallCatalog.OpenShop);
-            BuildNav(root, 0.78f, Loc.T("hall.friends"), () => ShowToast(Loc.T("hall.friends_toast")));
+            BuildNav(root, 0.78f, Loc.T("hall.friends"), () => HallSocial.Open(this));
             BuildNav(root, 0.90f, Loc.T("hall.account"), () => HallAccount.Open(this, RefreshProfile));
 
             var stageBox = UiFactory.Box(root, new Vector2(0.32f, 0.02f), new Vector2(0.68f, 0.07f), Vector2.zero, Vector2.zero, Color.clear, "Stage");
@@ -131,6 +141,8 @@ namespace Ashfold
 
         void ShowToast(string msg)
         {
+            if (_toast == null)
+                return;
             _toast.SetActive(true);
             _toast.GetComponentInChildren<Text>().text = msg;
             CancelInvoke(nameof(HideToast));
@@ -141,6 +153,45 @@ namespace Ashfold
         {
             if (_toast != null)
                 _toast.SetActive(false);
+        }
+
+        void OnDestroy()
+        {
+            var social = GameSession.I != null ? GameSession.I.Social : null;
+            if (social == null)
+                return;
+            social.Matched -= OnSocialMatched;
+            social.QueueStarted -= OnSocialQueueStarted;
+            social.QueueStopped -= OnSocialQueueStopped;
+        }
+
+        System.Collections.IEnumerator ConnectMetaSocket()
+        {
+            if (GameSession.I == null || GameSession.I.Nakama == null)
+                yield break;
+            var task = GameSession.I.Nakama.ConnectRealtimeAsync();
+            while (!task.IsCompleted)
+                yield return null;
+            if (task.IsFaulted)
+                Debug.LogWarning("[Ashfold] Hall socket: " + task.Exception.GetBaseException().Message);
+        }
+
+        void OnSocialMatched(Nakama.IMatchmakerMatched matched)
+        {
+            if (_prep != null)
+                _prep.JoinIncomingMatch(matched);
+        }
+
+        void OnSocialQueueStarted()
+        {
+            if (_prep != null)
+                _prep.WaitAsPartyMember();
+        }
+
+        void OnSocialQueueStopped()
+        {
+            if (_prep != null)
+                _prep.CancelFromPartyLeader();
         }
     }
 }
