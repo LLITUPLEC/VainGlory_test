@@ -203,6 +203,7 @@ namespace Ashfold
             field.placeholder = ph;
             field.characterLimit = characterLimit;
             field.contentType = contentType;
+            field.shouldHideMobileInput = true;
             return field;
         }
 

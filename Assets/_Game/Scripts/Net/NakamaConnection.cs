@@ -22,6 +22,9 @@ namespace Ashfold
         public ISession Session { get; private set; }
         public bool IsConnected => Session != null && !Session.HasExpired(DateTime.UtcNow);
 
+        Task _ensureTask;
+        bool _refreshWarned;
+
         public const long OpRoster = 11;
         public const long OpSnapshot = 20;
         public const long OpInputMove = 30;
@@ -47,7 +50,8 @@ namespace Ashfold
                 NakamaConfig.Host,
                 NakamaConfig.Port,
                 NakamaConfig.ServerKey,
-                UnityWebRequestAdapter.Instance)
+                UnityWebRequestAdapter.Instance,
+                false)
             {
                 Timeout = NakamaConfig.TimeoutSeconds
             };
@@ -72,6 +76,8 @@ namespace Ashfold
             PlayerPrefs.Save();
             var _ = DisconnectRealtimeAsync();
             Session = null;
+            _refreshWarned = false;
+            _ensureTask = null;
         }
 
         public async Task<ISession> TryRestoreSessionAsync()
@@ -120,6 +126,7 @@ namespace Ashfold
             }
 
             PersistSession();
+            _refreshWarned = false;
             Debug.Log($"[Ashfold] Nakama authenticated userId={Session.UserId} username={Session.Username}");
             return Session;
         }
@@ -138,20 +145,92 @@ namespace Ashfold
             }
 
             PersistSession();
+            _refreshWarned = false;
             Debug.Log($"[Ashfold] Email auth userId={Session.UserId} create={create}");
             return Session;
         }
 
-        public async Task LinkEmailAsync(string email, string password)
+        public async Task<bool> EnsureSessionAsync()
         {
             if (Session == null)
+                return false;
+            EnsureClient();
+            Task waiter;
+            lock (this)
+            {
+                if (_ensureTask != null && !_ensureTask.IsCompleted)
+                    waiter = _ensureTask;
+                else
+                {
+                    _ensureTask = EnsureSessionCoreAsync();
+                    waiter = _ensureTask;
+                }
+            }
+
+            try
+            {
+                await waiter;
+            }
+            catch (Exception e)
+            {
+                WarnRefreshOnce(e.Message);
+                return false;
+            }
+
+            return Session != null && !Session.HasExpired(DateTime.UtcNow);
+        }
+
+        async Task EnsureSessionCoreAsync()
+        {
+            if (Session == null)
+                return;
+            if (!Session.HasExpired(DateTime.UtcNow.AddMinutes(6)))
+                return;
+            if (string.IsNullOrEmpty(Session.RefreshToken) || RefreshTokenExpired(Session))
+            {
+                WarnRefreshOnce("Refresh token invalid or expired.");
+                return;
+            }
+
+            Session = await Client.SessionRefreshAsync(Session);
+            PersistSession();
+            _refreshWarned = false;
+            Debug.Log("[Ashfold] Nakama session refreshed");
+        }
+
+        static bool RefreshTokenExpired(ISession session)
+        {
+            if (session == null || session.RefreshExpireTime <= 0)
+                return false;
+            try
+            {
+                var exp = DateTimeOffset.FromUnixTimeSeconds(session.RefreshExpireTime).UtcDateTime;
+                return DateTime.UtcNow >= exp.AddMinutes(-1);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        void WarnRefreshOnce(string message)
+        {
+            if (_refreshWarned)
+                return;
+            _refreshWarned = true;
+            Debug.LogWarning("[Ashfold] Session refresh: " + message);
+        }
+
+        public async Task LinkEmailAsync(string email, string password)
+        {
+            if (!await EnsureSessionAsync())
                 throw new InvalidOperationException("Nakama session missing");
             await Client.LinkEmailAsync(Session, email, password);
         }
 
         public async Task LinkDeviceAsync(string deviceId)
         {
-            if (Session == null)
+            if (!await EnsureSessionAsync())
                 throw new InvalidOperationException("Nakama session missing");
             try
             {
@@ -165,14 +244,14 @@ namespace Ashfold
 
         public async Task<IApiAccount> GetAccountAsync()
         {
-            if (Session == null)
+            if (!await EnsureSessionAsync())
                 throw new InvalidOperationException("Nakama session missing");
             return await Client.GetAccountAsync(Session);
         }
 
         public async Task<string> RpcAsync(string id, string payload = "{}")
         {
-            if (!IsConnected)
+            if (!await EnsureSessionAsync())
                 throw new InvalidOperationException("Nakama session missing");
             var result = await Client.RpcAsync(Session, id, payload);
             return result.Payload;
@@ -181,7 +260,7 @@ namespace Ashfold
         public async Task ConnectRealtimeAsync()
         {
             EnsureClient();
-            if (Session == null)
+            if (!await EnsureSessionAsync())
                 throw new InvalidOperationException("Nakama session missing");
             if (Socket != null && Socket.IsConnected)
             {

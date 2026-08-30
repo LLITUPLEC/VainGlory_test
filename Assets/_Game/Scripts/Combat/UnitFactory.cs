@@ -32,6 +32,7 @@ namespace Ashfold
             combat.Def = def;
             combat.Unit = unit;
             combat.Motor = motor;
+            go.AddComponent<HeroProgression>();
 
             if (player)
             {

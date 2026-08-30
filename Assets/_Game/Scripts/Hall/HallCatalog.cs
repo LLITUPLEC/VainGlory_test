@@ -36,12 +36,15 @@ namespace Ashfold
                 Object.Destroy(card.GetComponentInChildren<Text>().gameObject);
 
                 var tint = unlocked ? GameContent.HeroColor(hero.Id) : GameTheme.TextMuted;
-                var color = UiFactory.Box(card.transform, new Vector2(0.2f, 0.42f), new Vector2(0.8f, 0.88f), Vector2.zero, Vector2.zero, tint, "Swatch");
+                var color = UiFactory.Box(card.transform, new Vector2(0.2f, 0.52f), new Vector2(0.8f, 0.90f), Vector2.zero, Vector2.zero, tint, "Swatch");
                 color.raycastTarget = false;
                 var caption = unlocked
                     ? hero.DisplayName.ToUpperInvariant() + "\n" + GameContent.RoleLabel(hero.Role) + "\n" + GameContent.HeroTagline(hero)
+                      + "\nQ " + GameContent.HeroAbility(hero, 0)
+                      + "  W " + GameContent.HeroAbility(hero, 1)
+                      + "  E " + GameContent.HeroAbility(hero, 2)
                     : hero.DisplayName.ToUpperInvariant() + "\n" + Loc.T("catalog.locked");
-                UiFactory.Label(card.transform, caption, 20, unlocked ? GameTheme.Text : GameTheme.TextMuted, TextAnchor.LowerCenter, FontStyle.Bold, true);
+                UiFactory.Label(card.transform, caption, 16, unlocked ? GameTheme.Text : GameTheme.TextMuted, TextAnchor.LowerCenter, FontStyle.Bold, true);
             }
         }
 

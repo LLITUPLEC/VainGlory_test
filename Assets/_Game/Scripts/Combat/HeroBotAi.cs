@@ -43,7 +43,7 @@ namespace Ashfold
 
         void Update()
         {
-            if (BattleRuntime.I != null && BattleRuntime.I.MatchOver)
+            if (BattleRuntime.I != null && BattleRuntime.I.Frozen)
                 return;
             if (Combat == null || Unit == null || _respawning || !Unit.IsAlive)
                 return;
@@ -88,15 +88,9 @@ namespace Ashfold
                 return;
             }
 
-            if (Combat.SkillReady && Random.value < 0.4f)
-            {
-                var near = FindTarget(Combat.Def.SkillRange);
-                if (near != null)
-                {
-                    Combat.CommandAttack(near);
-                    Combat.TryCastSkill();
-                }
-            }
+            if (Combat.Progress != null)
+                Combat.Progress.AutoSpend();
+            TryCastReady();
 
             var target = FindTarget(Mathf.Max(Combat.Def.AttackRange + 2.5f, 10f));
             if (target != null)
@@ -114,6 +108,40 @@ namespace Ashfold
             }
 
             Combat.CommandMove(PushGoal);
+        }
+
+        void TryCastReady()
+        {
+            if (Random.value > 0.55f)
+                return;
+            if (TryCastSlot(1))
+                return;
+            if (TryCastSlot(0))
+                return;
+            if (Random.value < 0.35f)
+                TryCastSlot(2);
+        }
+
+        bool TryCastSlot(int slot)
+        {
+            if (!Combat.SlotReady(slot))
+                return false;
+            var def = Combat.Ability(slot);
+            var rank = Combat.Progress != null ? Combat.Progress.RankOf(slot) : 1;
+            if (def == null)
+                return false;
+            var range = def.Rng(rank);
+            var target = FindTarget(Mathf.Max(range, Combat.Def.AttackRange + 1f));
+            if (def.Targeting == AbilityTargeting.NeedTarget || def.Targeting == AbilityTargeting.Ground)
+            {
+                target = FindTarget(range);
+                if (target == null)
+                    return false;
+            }
+            if (target != null)
+                Combat.CommandAttack(target);
+            var ground = target != null ? target.transform.position : Combat.transform.position + Combat.transform.forward * range * 0.6f;
+            return Combat.TryCastSkill(slot, target, ground);
         }
 
         void UpdateRetreatState()

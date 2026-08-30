@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 namespace Ashfold
 {
@@ -8,23 +9,31 @@ namespace Ashfold
     {
         public HeroCombat Hero;
         public CombatUnit Unit;
+        int _aimSlot = -1;
+        GameObject _aimMark;
 
         void Update()
         {
             if (Hero == null || Unit == null || !Unit.IsAlive)
                 return;
             Hero.EnsureControlIfAlive();
-            if (Hero.Motor != null && Hero.Motor.Locked)
+            if (BattleRuntime.I != null && BattleRuntime.I.InPrep)
                 return;
-            if (QPressed())
-                Hero.TryCastSkill();
+            if (PressedKey(UnityEngine.InputSystem.Key.Escape) || RightClicked())
+                StopAim();
+            if (PressedKey(UnityEngine.InputSystem.Key.Q))
+                PressSkill(0);
+            if (PressedKey(UnityEngine.InputSystem.Key.W))
+                PressSkill(1);
+            if (PressedKey(UnityEngine.InputSystem.Key.E))
+                PressSkill(2);
             if (PressedKey(UnityEngine.InputSystem.Key.B))
                 FountainShop.Open(Hero);
             if (PressedKey(UnityEngine.InputSystem.Key.R))
                 Hero.TryRecall();
             if (!Pressed())
                 return;
-            if (OverUi())
+            if (OverBlockingUi(_aimSlot >= 0))
                 return;
 
             var cam = Camera.main;
@@ -36,6 +45,13 @@ namespace Ashfold
             {
                 MapPingFx.TrySend(pingAt);
                 return;
+            }
+            if (_aimSlot >= 0 && PlanePoint(ray, out var aimAt))
+            {
+                var cast = Hero.TryCastSkill(_aimSlot, Hero.AttackTarget, aimAt);
+                StopAim();
+                if (cast)
+                    return;
             }
             var unit = PickUnit(ray);
             if (unit == null && PlanePoint(ray, out var ground))
@@ -65,9 +81,99 @@ namespace Ashfold
                    && GameSession.I.MatchClient != null;
         }
 
-        static bool QPressed()
+        public int AimSlot => _aimSlot;
+
+        /// <summary>Как в VG: невыученное умение с очком — сначала прокачка, иначе каст / прицел.</summary>
+        public void PressSkill(int slot)
         {
-            return PressedKey(UnityEngine.InputSystem.Key.Q);
+            if (Hero == null)
+                return;
+            var p = Hero.Progress;
+            if (Shift() || (p != null && p.RankOf(slot) < 1 && p.CanUpgrade(slot)))
+            {
+                Hero.TryUpgrade(slot);
+                return;
+            }
+            RequestSkill(slot);
+        }
+
+        public void RequestSkill(int slot)
+        {
+            if (Hero == null)
+                return;
+            var def = Hero.Ability(slot);
+            if (def == null)
+                return;
+            if (_aimSlot == slot)
+            {
+                StopAim();
+                return;
+            }
+            if (_aimSlot >= 0)
+                StopAim();
+            if (def.Targeting == AbilityTargeting.Ground)
+            {
+                if (!Hero.SlotReady(slot))
+                    return;
+                _aimSlot = slot;
+                EnsureMark();
+                return;
+            }
+            Hero.TryCastSkill(slot, Hero.AttackTarget, Hero.transform.position);
+        }
+
+        void StopAim()
+        {
+            _aimSlot = -1;
+            if (_aimMark != null)
+                _aimMark.SetActive(false);
+        }
+
+        void LateUpdate()
+        {
+            if (_aimSlot < 0 || _aimMark == null)
+                return;
+            var cam = Camera.main;
+            if (cam == null)
+                return;
+            var ray = cam.ScreenPointToRay(PointerScreen());
+            if (!PlanePoint(ray, out var p))
+                return;
+            _aimMark.SetActive(true);
+            _aimMark.transform.position = p + Vector3.up * 0.08f;
+            var def = Hero != null ? Hero.Ability(_aimSlot) : null;
+            var rank = Hero != null && Hero.Progress != null ? Hero.Progress.RankOf(_aimSlot) : 1;
+            var r = def != null ? Mathf.Max(1.6f, def.Dur(Mathf.Max(1, rank))) : 2f;
+            _aimMark.transform.localScale = new Vector3(r * 2f, 0.12f, r * 2f);
+        }
+
+        void EnsureMark()
+        {
+            if (_aimMark != null)
+            {
+                _aimMark.SetActive(true);
+                return;
+            }
+            _aimMark = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            var col = _aimMark.GetComponent<Collider>();
+            if (col != null)
+                Object.DestroyImmediate(col);
+            _aimMark.name = "AimMark";
+            _aimMark.layer = 2;
+            _aimMark.GetComponent<Renderer>().sharedMaterial = RuntimeMat.Make(new Color(GameTheme.Gold.r, GameTheme.Gold.g, GameTheme.Gold.b, 0.35f));
+        }
+
+        void OnDestroy()
+        {
+            if (_aimMark != null)
+                Destroy(_aimMark);
+        }
+
+        static bool Shift()
+        {
+            if (Keyboard.current == null)
+                return false;
+            return Keyboard.current.leftShiftKey.isPressed || Keyboard.current.rightShiftKey.isPressed;
         }
 
         static bool PingHeld()
@@ -76,6 +182,11 @@ namespace Ashfold
                 return false;
             return Keyboard.current.leftAltKey.isPressed || Keyboard.current.rightAltKey.isPressed
                    || Keyboard.current.gKey.isPressed;
+        }
+
+        static bool RightClicked()
+        {
+            return Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
         }
 
         static bool PressedKey(UnityEngine.InputSystem.Key key)
@@ -92,6 +203,8 @@ namespace Ashfold
 
         static Vector2 PointerScreen()
         {
+            if (Mouse.current != null && (Mouse.current.leftButton.isPressed || Mouse.current.leftButton.wasPressedThisFrame || Mouse.current.rightButton.isPressed))
+                return Mouse.current.position.ReadValue();
             if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.isPressed)
                 return Touchscreen.current.primaryTouch.position.ReadValue();
             if (Mouse.current != null)
@@ -103,7 +216,7 @@ namespace Ashfold
 
         static readonly System.Collections.Generic.List<RaycastResult> UiHits = new System.Collections.Generic.List<RaycastResult>(8);
 
-        static bool OverUi()
+        static bool OverBlockingUi(bool aiming)
         {
             var es = EventSystem.current;
             if (es == null)
@@ -111,7 +224,23 @@ namespace Ashfold
             var ped = new PointerEventData(es) { position = PointerScreen() };
             UiHits.Clear();
             es.RaycastAll(ped, UiHits);
-            return UiHits.Count > 0;
+            for (var i = 0; i < UiHits.Count; i++)
+            {
+                var go = UiHits[i].gameObject;
+                if (go == null)
+                    continue;
+                var canvas = go.GetComponentInParent<Canvas>();
+                if (canvas != null && canvas.renderMode == RenderMode.WorldSpace)
+                    continue;
+                if (go.GetComponentInParent<WorldHpBar>() != null)
+                    continue;
+                if (go.GetComponentInParent<DamagePopup>() != null)
+                    continue;
+                if (aiming && go.GetComponentInParent<Button>() == null)
+                    continue;
+                return true;
+            }
+            return false;
         }
 
         static bool PlanePoint(Ray ray, out Vector3 point)
@@ -151,7 +280,7 @@ namespace Ashfold
             var bestSq = radius * radius;
             foreach (var u in CombatUnit.All)
             {
-                if (!u.IsAlive)
+                if (u == null || !u.IsAlive)
                     continue;
                 var d = u.transform.position;
                 d.y = point.y;

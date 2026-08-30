@@ -14,9 +14,12 @@ namespace Ashfold
         Text _essenceLabel;
         MatchPrepFlow _prep;
         GameObject _toast;
+        GameObject _friendsBadge;
+        Text _friendsBadgeLabel;
 
         void Awake()
         {
+            AppUi.PurgeBattleLeftovers();
             AppUi.EnsureEventSystem();
             if (Camera.main != null)
                 Camera.main.backgroundColor = GameTheme.Bg;
@@ -36,6 +39,7 @@ namespace Ashfold
                 social.Matched += OnSocialMatched;
                 social.QueueStarted += OnSocialQueueStarted;
                 social.QueueStopped += OnSocialQueueStopped;
+                social.Changed += OnSocialChanged;
             }
             if (NakamaConfig.UseServer)
                 StartCoroutine(ConnectMetaSocket());
@@ -49,7 +53,7 @@ namespace Ashfold
 
             UiFactory.Box(root, new Vector2(0.18f, 0.22f), new Vector2(0.82f, 0.86f), Vector2.zero, Vector2.zero, GameTheme.Hex(0x3DCEC7, 0.05f), "Showcase");
             _showcaseBody = UiFactory.Box(root, new Vector2(0.38f, 0.32f), new Vector2(0.62f, 0.80f), Vector2.zero, Vector2.zero, GameTheme.Gold, "HeroStand");
-            _showcaseName = UiFactory.Label(_showcaseBody.transform, "BASTION", 28, GameTheme.Bg, TextAnchor.LowerCenter, FontStyle.Bold);
+            _showcaseName = UiFactory.Label(_showcaseBody.transform, "BASTION", 18, GameTheme.Bg, TextAnchor.LowerCenter, FontStyle.Bold, true);
 
             var profile = GameSession.I != null && GameSession.I.IsAuthenticated
                 ? GameSession.I.Profile
@@ -64,14 +68,19 @@ namespace Ashfold
             UiFactory.Stretch(_essenceLabel.rectTransform, 18, 4);
 
             var play = UiFactory.Button(root, Loc.T("hall.play"), () => _prep.OpenModeSelect(), GameTheme.Gold, GameTheme.Bg);
-            UiFactory.SetAnchors(play.GetComponent<RectTransform>(), new Vector2(0.38f, 0.10f), new Vector2(0.62f, 0.20f), Vector2.zero, Vector2.zero);
-            play.GetComponentInChildren<Text>().fontSize = 36;
+            UiFactory.SetAnchors(play.GetComponent<RectTransform>(), new Vector2(0.30f, 0.10f), new Vector2(0.54f, 0.20f), Vector2.zero, Vector2.zero);
+            play.GetComponentInChildren<Text>().fontSize = 32;
             play.interactable = false;
             StartCoroutine(EnablePlayAfterPointerUp(play));
 
+            var range = UiFactory.Button(root, Loc.T("hall.range"), () => UnityEngine.SceneManagement.SceneManager.LoadScene(AppScenes.Sandbox), GameTheme.BgPanelSoft, GameTheme.Gold);
+            UiFactory.SetAnchors(range.GetComponent<RectTransform>(), new Vector2(0.56f, 0.10f), new Vector2(0.72f, 0.20f), Vector2.zero, Vector2.zero);
+            range.GetComponentInChildren<Text>().fontSize = 22;
+
             BuildNav(root, 0.04f, Loc.T("hall.heroes"), () => HallCatalog.OpenHeroes(RefreshShowcase));
             BuildNav(root, 0.22f, Loc.T("hall.shop"), HallCatalog.OpenShop);
-            BuildNav(root, 0.78f, Loc.T("hall.friends"), () => HallSocial.Open(this));
+            var friendsBtn = BuildNav(root, 0.78f, Loc.T("hall.friends"), () => HallSocial.Open(this));
+            AttachFriendsBadge(friendsBtn.transform);
             BuildNav(root, 0.90f, Loc.T("hall.account"), () => HallAccount.Open(this, RefreshProfile));
 
             var stageBox = UiFactory.Box(root, new Vector2(0.32f, 0.02f), new Vector2(0.68f, 0.07f), Vector2.zero, Vector2.zero, Color.clear, "Stage");
@@ -84,8 +93,12 @@ namespace Ashfold
 
         IEnumerator EnablePlayAfterPointerUp(Button play)
         {
-            while (BootFlow.PointerHeld())
+            var t = 0f;
+            while (BootFlow.PointerHeld() && t < 0.6f)
+            {
+                t += Time.unscaledDeltaTime;
                 yield return null;
+            }
             yield return null;
             if (play != null)
                 play.interactable = true;
@@ -103,7 +116,10 @@ namespace Ashfold
             if (_showcaseBody != null)
                 _showcaseBody.color = GameContent.HeroColor(hero.Id);
             if (_showcaseName != null)
-                _showcaseName.text = hero.DisplayName.ToUpperInvariant() + "\n" + GameContent.RoleLabel(hero.Role);
+                _showcaseName.text = hero.DisplayName.ToUpperInvariant() + "\n" + GameContent.RoleLabel(hero.Role)
+                    + "\nQ " + GameContent.HeroAbility(hero, 0)
+                    + "  W " + GameContent.HeroAbility(hero, 1)
+                    + "  E " + GameContent.HeroAbility(hero, 2);
             if (persist && GameSession.I != null)
                 StartCoroutine(SaveProgressSoon());
         }
@@ -132,11 +148,38 @@ namespace Ashfold
                 yield return null;
         }
 
-        static void BuildNav(Transform root, float x, string title, UnityEngine.Events.UnityAction action)
+        static Button BuildNav(Transform root, float x, string title, UnityEngine.Events.UnityAction action)
         {
             var btn = UiFactory.Button(root, title, action, GameTheme.BgPanel, GameTheme.Text);
             UiFactory.SetAnchors(btn.GetComponent<RectTransform>(), new Vector2(x, 0.04f), new Vector2(x + 0.12f, 0.11f), Vector2.zero, Vector2.zero);
             btn.GetComponentInChildren<Text>().fontSize = 16;
+            return btn;
+        }
+
+        void AttachFriendsBadge(Transform friendsBtn)
+        {
+            var badge = UiFactory.Box(friendsBtn, new Vector2(0.68f, 0.58f), new Vector2(1.12f, 1.22f), Vector2.zero, Vector2.zero, GameTheme.Crimson, "Badge");
+            badge.raycastTarget = false;
+            _friendsBadgeLabel = UiFactory.Label(badge.transform, "1", 12, GameTheme.Text, TextAnchor.MiddleCenter, FontStyle.Bold);
+            _friendsBadge = badge.gameObject;
+            _friendsBadge.SetActive(false);
+            RefreshFriendsBadge();
+        }
+
+        void RefreshFriendsBadge()
+        {
+            if (_friendsBadge == null)
+                return;
+            var social = GameSession.I != null ? GameSession.I.Social : null;
+            var n = social != null ? social.IncomingFriendCount : 0;
+            _friendsBadge.SetActive(n > 0);
+            if (_friendsBadgeLabel != null && n > 0)
+                _friendsBadgeLabel.text = n > 9 ? "9+" : n.ToString();
+        }
+
+        void OnSocialChanged()
+        {
+            RefreshFriendsBadge();
         }
 
         void ShowToast(string msg)
@@ -163,6 +206,7 @@ namespace Ashfold
             social.Matched -= OnSocialMatched;
             social.QueueStarted -= OnSocialQueueStarted;
             social.QueueStopped -= OnSocialQueueStopped;
+            social.Changed -= OnSocialChanged;
         }
 
         System.Collections.IEnumerator ConnectMetaSocket()

@@ -136,11 +136,12 @@ namespace Ashfold
     }
 
     [Serializable]
-    public sealed class NetSkillDto
-    {
-        public float yaw;
-        public int seq;
-    }
+        public sealed class NetSkillDto
+        {
+            public float yaw;
+            public int seq;
+            public int slot;
+        }
 
     [Serializable]
     public sealed class NetBuyDto

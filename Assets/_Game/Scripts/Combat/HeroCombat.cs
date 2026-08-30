@@ -10,15 +10,19 @@ namespace Ashfold
         public TapMoveMotor Motor;
         public CombatUnit AttackTarget;
         public float AttackCd;
-        public float SkillCd;
+        public readonly float[] SkillCd = new float[HeroRules.SlotCount];
         public readonly List<string> Items = new List<string>(6);
         public bool Recalling;
         public bool ServerAuth;
         public float RecallT;
         public const float RecallDuration = 2.5f;
         public const int MaxItems = 6;
-        float _skillLockUntil;
         float _buyLockUntil;
+
+        public HeroProgression Progress
+        {
+            get { return GetComponent<HeroProgression>(); }
+        }
 
         public Vector3 FountainPos;
         public float ExtraDamage;
@@ -26,13 +30,27 @@ namespace Ashfold
         public float ExtraHeal;
         public float ExtraMove;
 
-        public bool SkillReady =>
-            SkillCd <= 0f
-            && Time.unscaledTime >= _skillLockUntil
-            && Unit != null && Unit.IsAlive && !Unit.Stunned && !Recalling;
+        public bool SlotReady(int slot)
+        {
+            if (slot < 0 || slot >= HeroRules.SlotCount)
+                return false;
+            var rank = Progress != null ? Progress.RankOf(slot) : 0;
+            if (rank < 1)
+                return false;
+            if (BattleRuntime.I != null && BattleRuntime.I.InPrep)
+                return false;
+            return SkillCd[slot] <= 0f
+                   && Unit != null && Unit.IsAlive && !Unit.Stunned && !Recalling;
+        }
+
+        public bool SkillReady => SlotReady(0);
         public float AttackDamage => Def.Damage + ExtraDamage;
         public float AttackInterval => Def.AttackInterval / Mathf.Max(0.4f, 1f + ExtraAs);
-        public float SkillPower => Def.SkillPower * (1f + ExtraHeal);
+
+        public AbilityDef Ability(int slot)
+        {
+            return Def != null ? Def.Ability(slot) : null;
+        }
 
         void Start()
         {
@@ -52,6 +70,14 @@ namespace Ashfold
             {
                 Motor.Stop();
                 Recalling = false;
+                return;
+            }
+
+            if (BattleRuntime.I != null && BattleRuntime.I.InPrep)
+            {
+                if (Motor != null)
+                    Motor.Stop();
+                AttackTarget = null;
                 return;
             }
 
@@ -88,7 +114,7 @@ namespace Ashfold
                 Unit.Heal(Unit.MaxHp * 0.22f * Time.deltaTime);
 
             AttackCd -= Time.deltaTime;
-            SkillCd -= Time.deltaTime;
+            TickSkills();
             if (ExtraHeal > 0f)
                 Unit.Heal(6f * ExtraHeal * Time.deltaTime);
 
@@ -174,8 +200,8 @@ namespace Ashfold
             CancelRecall();
             AttackTarget = null;
             AttackCd = 0f;
-            SkillCd = 0f;
-            _skillLockUntil = 0f;
+            for (var i = 0; i < SkillCd.Length; i++)
+                SkillCd[i] = 0f;
             if (Unit != null)
             {
                 Unit.Hp = Unit.MaxHp;
@@ -211,7 +237,7 @@ namespace Ashfold
         void PredictLocal()
         {
             EnsureControlIfAlive();
-            SkillCd -= Time.deltaTime;
+            TickSkills();
             if (Unit.Stunned)
             {
                 if (Motor != null)
@@ -247,36 +273,114 @@ namespace Ashfold
             }
         }
 
+        void TickSkills()
+        {
+            for (var i = 0; i < SkillCd.Length; i++)
+                SkillCd[i] -= Time.deltaTime;
+        }
+
         public bool TryCastSkill()
         {
-            if (!SkillReady)
+            return TryCastSkill(0, AttackTarget, transform.position);
+        }
+
+        public bool TryCastSkill(int slot, CombatUnit target, Vector3 ground)
+        {
+            if (!SlotReady(slot))
                 return false;
+            var def = Ability(slot);
+            var rank = Progress != null ? Progress.RankOf(slot) : 0;
+            if (def == null || rank < 1)
+                return false;
+
+            if (def.Targeting == AbilityTargeting.NeedTarget)
+            {
+                if (target == null || !target.IsAlive || DistFlat(target.transform.position) > def.Rng(rank))
+                    target = NearestEnemy(def.Rng(rank));
+                if (target == null)
+                    return false;
+            }
+
+            if (def.Targeting == AbilityTargeting.Ground)
+                ground = ClampGround(ground, def.Rng(rank));
+
             CancelRecall();
-            var cd = Def != null ? Mathf.Max(0.35f, Def.SkillCooldown) : 8f;
-            SkillCd = cd;
-            _skillLockUntil = Time.unscaledTime + cd;
-            SnapFaceToTarget();
+            SkillCd[slot] = def.Cd(rank);
+            FaceForSkill(def, target, ground);
 
             if (ServerAuth)
             {
-                PlaySkillFx();
+                AbilityCaster.PlayFx(this, def, ground);
                 if (GameSession.I != null && GameSession.I.MatchClient != null)
-                    GameSession.I.MatchClient.SendSkill(transform.eulerAngles.y);
+                    GameSession.I.MatchClient.SendSkill(transform.eulerAngles.y, slot);
             }
             else
-                ApplySkillHits();
+                AbilityCaster.Execute(this, def, rank, target, ground);
 
             return true;
         }
 
-        void SnapFaceToTarget()
+        public bool TryUpgrade(int slot)
         {
-            if (AttackTarget == null || !AttackTarget.IsAlive)
+            return Progress != null && Progress.TryUpgrade(slot);
+        }
+
+        void FaceForSkill(AbilityDef def, CombatUnit target, Vector3 ground)
+        {
+            Vector3 to;
+            if (def.Targeting == AbilityTargeting.Ground)
+                to = ground - transform.position;
+            else if (target != null && target.IsAlive)
+                to = target.transform.position - transform.position;
+            else
                 return;
-            var to = AttackTarget.transform.position - transform.position;
             to.y = 0f;
             if (to.sqrMagnitude > 0.01f)
                 transform.rotation = Quaternion.LookRotation(to);
+        }
+
+        Vector3 ClampGround(Vector3 ground, float range)
+        {
+            var to = ground - transform.position;
+            to.y = 0f;
+            if (to.magnitude > range && range > 0.1f)
+                ground = transform.position + to.normalized * range;
+            ground.y = 0f;
+            return ground;
+        }
+
+        float DistFlat(Vector3 world)
+        {
+            var d = world - transform.position;
+            d.y = 0f;
+            return d.magnitude;
+        }
+
+        CombatUnit NearestEnemy(float radius)
+        {
+            CombatUnit best = null;
+            var bestSq = radius * radius;
+            var origin = transform.position;
+            foreach (var u in CombatUnit.All)
+            {
+                if (u == null || Unit == null || !Unit.IsEnemy(u))
+                    continue;
+                var d = u.transform.position - origin;
+                d.y = 0f;
+                var sq = d.sqrMagnitude;
+                if (sq < bestSq)
+                {
+                    bestSq = sq;
+                    best = u;
+                }
+            }
+            return best;
+        }
+
+        public void DebugResetCds()
+        {
+            for (var i = 0; i < SkillCd.Length; i++)
+                SkillCd[i] = 0f;
         }
 
         public bool TryBuy(ItemDef item)
@@ -382,86 +486,6 @@ namespace Ashfold
             Unit.MaxHp = newMax;
             Unit.Resist = Mathf.Clamp01(resist);
             Motor.Speed = Def.MoveSpeed * (1f + ExtraMove);
-        }
-
-        void ApplySkillHits()
-        {
-            switch (Def.Id)
-            {
-                case "bastion":
-                    CastCone();
-                    break;
-                case "vesper":
-                    Projectile.SpawnSkillshot(Unit, transform.forward, SkillPower, 22f, 0.7f, GameTheme.Crimson);
-                    break;
-                case "mira":
-                    CastMendNova();
-                    break;
-            }
-        }
-
-        void PlaySkillFx()
-        {
-            switch (Def.Id)
-            {
-                case "bastion":
-                    Flash(GameTheme.Gold);
-                    break;
-                case "vesper":
-                    Projectile.SpawnSkillshot(Unit, transform.forward, 0f, 22f, 0.7f, GameTheme.Crimson);
-                    break;
-                case "mira":
-                    Flash(GameTheme.Teal);
-                    break;
-            }
-        }
-
-        void CastMendNova()
-        {
-            var units = new List<CombatUnit>(CombatUnit.All);
-            foreach (var u in units)
-            {
-                if (u == null || !u.IsAlive)
-                    continue;
-                var d = u.transform.position - transform.position;
-                d.y = 0f;
-                if (d.magnitude > Def.SkillRange)
-                    continue;
-                if (u.Team == Unit.Team)
-                    u.Heal(SkillPower);
-                else if (Unit.IsEnemy(u))
-                    u.ApplyDamage(SkillPower * 0.55f, Unit);
-            }
-            Flash(GameTheme.Teal);
-        }
-
-        void CastCone()
-        {
-            var units = new List<CombatUnit>(CombatUnit.All);
-            foreach (var u in units)
-            {
-                if (u == null || !Unit.IsEnemy(u))
-                    continue;
-                var to = u.transform.position - transform.position;
-                to.y = 0f;
-                if (to.magnitude > Def.SkillRange)
-                    continue;
-                if (Vector3.Angle(transform.forward, to) > 55f)
-                    continue;
-                u.ApplyDamage(SkillPower, Unit);
-                u.Stun(0.85f);
-            }
-            Flash(GameTheme.Gold);
-        }
-
-        void Flash(Color color)
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            Object.Destroy(go.GetComponent<Collider>());
-            go.transform.position = transform.position + Vector3.up;
-            go.transform.localScale = Vector3.one * (Def.Id == "mira" ? Def.SkillRange * 2f : 2.2f);
-            go.GetComponent<Renderer>().sharedMaterial = RuntimeMat.Make(new Color(color.r, color.g, color.b, 0.35f));
-            Object.Destroy(go, 0.25f);
         }
     }
 }

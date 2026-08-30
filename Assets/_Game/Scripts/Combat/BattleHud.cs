@@ -11,17 +11,18 @@ namespace Ashfold
         Text _hp;
         Text _gold;
         Text _kda;
-        Text _skill;
         Text _items;
         Text _hint;
         Text _death;
         Text _clock;
-        Button _skillBtn;
+        readonly SkillSlot[] _skills = new SkillSlot[HeroRules.SlotCount];
         Button _surrender;
         Image _recallBar;
         GameObject _deathPanel;
         GameObject _netPanel;
         Text _netText;
+        GameObject _countPanel;
+        Text _countText;
         bool _dead;
 
         public static BattleHud Create(CombatUnit player, HeroCombat combat)
@@ -76,8 +77,8 @@ namespace Ashfold
 
         void Build(Transform root)
         {
-            var top = UiFactory.Box(root, new Vector2(0.02f, 0.88f), new Vector2(0.30f, 0.98f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Hero");
-            _hp = UiFactory.Label(top.transform, "", 18, GameTheme.Text, TextAnchor.MiddleLeft);
+            var top = UiFactory.Box(root, new Vector2(0.02f, 0.82f), new Vector2(0.30f, 0.98f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Hero");
+            _hp = UiFactory.Label(top.transform, "", 16, GameTheme.Text, TextAnchor.MiddleLeft, FontStyle.Normal, true);
             UiFactory.Stretch(_hp.rectTransform, 12, 4);
 
             var gold = UiFactory.Box(root, new Vector2(0.78f, 0.92f), new Vector2(0.98f, 0.98f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Gold");
@@ -97,20 +98,19 @@ namespace Ashfold
 
             MinimapView.Create(root);
 
-            var bar = UiFactory.Box(root, new Vector2(0.22f, 0.03f), new Vector2(0.50f, 0.14f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Hint");
+            var bar = UiFactory.Box(root, new Vector2(0.18f, 0.03f), new Vector2(0.40f, 0.14f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Hint");
             _hint = UiFactory.Label(bar.transform, Loc.T("hud.hint"), 15, GameTheme.TextMuted, TextAnchor.MiddleCenter, FontStyle.Normal, true);
 
-            _skillBtn = UiFactory.Button(root, "Q", OnSkill, GameTheme.Gold, GameTheme.Bg);
-            UiFactory.SetAnchors(_skillBtn.GetComponent<RectTransform>(), new Vector2(0.52f, 0.03f), new Vector2(0.64f, 0.14f), Vector2.zero, Vector2.zero);
-            _skill = _skillBtn.GetComponentInChildren<Text>();
-            _skill.fontSize = 18;
+            _skills[0] = MakeSkill(root, 0, "Q", 0.41f, 0.51f, GameTheme.Gold);
+            _skills[1] = MakeSkill(root, 1, "W", 0.52f, 0.62f, GameTheme.Teal);
+            _skills[2] = MakeSkill(root, 2, "E", 0.63f, 0.73f, GameTheme.Crimson);
 
             var shop = UiFactory.Button(root, Loc.T("hud.shop"), OnShop, GameTheme.BgPanelSoft, GameTheme.Gold);
-            UiFactory.SetAnchors(shop.GetComponent<RectTransform>(), new Vector2(0.66f, 0.03f), new Vector2(0.78f, 0.14f), Vector2.zero, Vector2.zero);
+            UiFactory.SetAnchors(shop.GetComponent<RectTransform>(), new Vector2(0.75f, 0.03f), new Vector2(0.85f, 0.14f), Vector2.zero, Vector2.zero);
             shop.GetComponentInChildren<Text>().fontSize = 16;
 
             var recall = UiFactory.Button(root, Loc.T("hud.recall"), OnRecall, GameTheme.BgPanelSoft, GameTheme.Teal);
-            UiFactory.SetAnchors(recall.GetComponent<RectTransform>(), new Vector2(0.80f, 0.03f), new Vector2(0.92f, 0.14f), Vector2.zero, Vector2.zero);
+            UiFactory.SetAnchors(recall.GetComponent<RectTransform>(), new Vector2(0.86f, 0.03f), new Vector2(0.97f, 0.14f), Vector2.zero, Vector2.zero);
             recall.GetComponentInChildren<Text>().fontSize = 16;
 
             _surrender = UiFactory.Button(root, Loc.T("hud.surrender"), () => { }, GameTheme.Crimson, GameTheme.Text);
@@ -137,18 +137,47 @@ namespace Ashfold
             _netText = UiFactory.Label(_netPanel.transform, Loc.T("hud.reconnecting", 30), 26, GameTheme.Gold, TextAnchor.MiddleCenter, FontStyle.Bold, true);
             _netPanel.SetActive(false);
 
+            _countPanel = UiFactory.Box(root, new Vector2(0.30f, 0.38f), new Vector2(0.70f, 0.62f), Vector2.zero, Vector2.zero, GameTheme.Hex(0x000000, 0.45f), "Count").gameObject;
+            _countPanel.GetComponent<Image>().raycastTarget = false;
+            _countText = UiFactory.Label(_countPanel.transform, "10", 88, GameTheme.Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            _countPanel.SetActive(false);
+
             var stage = UiFactory.Box(root, new Vector2(0.32f, 0.94f), new Vector2(0.68f, 0.99f), Vector2.zero, Vector2.zero, Color.clear, "St");
             UiFactory.Label(stage.transform, Loc.T("hud.stage"), 14, GameTheme.GoldDim, TextAnchor.MiddleCenter);
         }
 
-        void OnSkill()
+        SkillSlot MakeSkill(Transform root, int slot, string key, float x0, float x1, Color fg)
+        {
+            var slotCopy = slot;
+            var btn = UiFactory.Button(root, key, () => OnSkill(slotCopy), GameTheme.BgPanel, fg);
+            UiFactory.SetAnchors(btn.GetComponent<RectTransform>(), new Vector2(x0, 0.03f), new Vector2(x1, 0.14f), Vector2.zero, Vector2.zero);
+            var label = btn.GetComponentInChildren<Text>();
+            label.fontSize = 15;
+            label.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var plus = UiFactory.Button(btn.transform, "+", () => OnUpgrade(slotCopy), GameTheme.Gold, GameTheme.Bg);
+            UiFactory.SetAnchors(plus.GetComponent<RectTransform>(), new Vector2(0.62f, 0.62f), new Vector2(1f, 1f), new Vector2(2, 2), new Vector2(-2, -2));
+            plus.GetComponentInChildren<Text>().fontSize = 16;
+            return new SkillSlot { Btn = btn, Label = label, Plus = plus };
+        }
+
+        void OnSkill(int slot)
         {
             if (_dead || Combat == null)
                 return;
-            if (!Combat.TryCastSkill())
+            if (BattleRuntime.I != null && BattleRuntime.I.InPrep)
                 return;
-            if (_skillBtn != null)
-                _skillBtn.interactable = false;
+            var cmd = Combat.GetComponent<PlayerCommander>();
+            if (cmd != null)
+                cmd.PressSkill(slot);
+            else
+                Combat.TryCastSkill(slot, Combat.AttackTarget, Combat.transform.position);
+        }
+
+        void OnUpgrade(int slot)
+        {
+            if (_dead || Combat == null)
+                return;
+            Combat.TryUpgrade(slot);
         }
 
         void OnShop()
@@ -174,16 +203,24 @@ namespace Ashfold
             if (Player == null || Combat == null)
                 return;
             var def = Combat.Def;
+            var prog = Combat.Progress;
+            var lv = prog != null ? prog.Level : 1;
+            var pts = prog != null ? prog.Unspent : 0;
             if (_dead)
             {
-                _hp.text = def.DisplayName.ToUpperInvariant() + "\n" + Loc.T("hud.dead");
+                _hp.text = def.DisplayName.ToUpperInvariant() + "\n" + Loc.T("hud.dead") + "\n" + Loc.T("hud.level", lv);
                 _hp.color = GameTheme.TextMuted;
             }
             else
             {
-                _hp.text = def.DisplayName.ToUpperInvariant() + "\n" + Mathf.CeilToInt(Player.Hp) + " / " + Mathf.CeilToInt(Player.MaxHp);
+                var ptsLine = pts > 0 ? "  " + Loc.T("hud.skill_pts", pts) : "";
+                _hp.text = def.DisplayName.ToUpperInvariant()
+                           + "\n" + Mathf.CeilToInt(Player.Hp) + " / " + Mathf.CeilToInt(Player.MaxHp)
+                           + "\n" + Loc.T("hud.level", lv) + ptsLine;
                 _hp.color = Color.Lerp(GameTheme.AllyHpLow, GameTheme.AllyHp, Player.Hp01);
             }
+
+            RefreshCountdown();
 
             var assists = 0;
             if (MatchStatsTracker.I != null && MatchStatsTracker.I.ByUnit.TryGetValue(Player, out var row))
@@ -211,17 +248,11 @@ namespace Ashfold
                 _items.text = names;
             }
 
-            var skillName = GameContent.HeroSkill(def);
-            if (Combat.SkillCd > 0f || _dead)
-            {
-                _skill.text = _dead ? "Q\n—" : "Q  " + Combat.SkillCd.ToString("0.0") + "\n" + skillName;
-                _skillBtn.interactable = false;
-            }
-            else
-            {
-                _skill.text = "Q\n" + skillName;
-                _skillBtn.interactable = true;
-            }
+            for (var i = 0; i < _skills.Length; i++)
+                RefreshSkill(_skills[i], i);
+
+            var cmd = Combat.GetComponent<PlayerCommander>();
+            var aiming = cmd != null && cmd.AimSlot >= 0;
 
             var recRoot = _recallBar != null ? _recallBar.transform.parent.gameObject : null;
             if (recRoot != null)
@@ -233,9 +264,92 @@ namespace Ashfold
                     _recallBar.rectTransform.anchorMax = new Vector2(t, 1f);
                     _hint.text = Loc.T("hud.recalling", HeroCombat.RecallDuration - Combat.RecallT);
                 }
+                else if (aiming)
+                    _hint.text = Loc.T("hud.aim_ground");
                 else if (!_dead && FoldMapBuilder.InFountain(Combat.transform.position, Player.Team))
                     _hint.text = Loc.T("hud.fountain");
+                else if (!_dead)
+                    _hint.text = Loc.T("hud.hint");
             }
+        }
+
+        void RefreshCountdown()
+        {
+            if (_countPanel == null || _countText == null)
+                return;
+            var rt = BattleRuntime.I;
+            if (rt == null || rt.MatchOver)
+            {
+                _countPanel.SetActive(false);
+                return;
+            }
+            if (rt.InPrep)
+            {
+                _countPanel.SetActive(true);
+                _countText.fontSize = 88;
+                _countText.text = Mathf.CeilToInt(rt.Countdown).ToString();
+                return;
+            }
+            if (rt.MatchTime < 1.2f)
+            {
+                _countPanel.SetActive(true);
+                _countText.fontSize = 64;
+                _countText.text = Loc.T("hud.fight");
+                return;
+            }
+            _countPanel.SetActive(false);
+        }
+
+        void RefreshSkill(SkillSlot slot, int index)
+        {
+            if (slot == null || slot.Btn == null || Combat == null)
+                return;
+            var keys = new[] { "Q", "W", "E" };
+            var def = Combat.Ability(index);
+            var name = def != null ? def.DisplayName : "";
+            var prog = Combat.Progress;
+            var rank = prog != null ? prog.RankOf(index) : 0;
+            var max = HeroRules.MaxRank(index);
+            var canUp = prog != null && prog.CanUpgrade(index);
+            if (slot.Plus != null)
+                slot.Plus.gameObject.SetActive(!_dead && canUp);
+
+            if (_dead)
+            {
+                slot.Label.text = keys[index] + "\n—";
+                slot.Btn.interactable = false;
+                return;
+            }
+
+            if (rank < 1)
+            {
+                if (index == (int)AbilitySlot.C)
+                    slot.Label.text = keys[index] + "\n" + Loc.T("hud.ult_locked", HeroRules.UltUnlockLevel[0]);
+                else
+                    slot.Label.text = keys[index] + "\n" + Loc.T("hud.locked");
+                slot.Btn.interactable = canUp;
+                return;
+            }
+
+            var cd = Combat.SkillCd[index];
+            var rankMark = rank + "/" + max;
+            if (cd > 0f)
+            {
+                slot.Label.text = keys[index] + "  " + cd.ToString("0.0") + "\n" + name + "  " + rankMark;
+                slot.Btn.interactable = canUp;
+            }
+            else
+            {
+                slot.Label.text = keys[index] + "\n" + name + "  " + rankMark;
+                slot.Btn.interactable = true;
+            }
+        }
+
+        sealed class SkillSlot
+        {
+            public Button Btn;
+            public Text Label;
+            public Button Plus;
         }
     }
 }

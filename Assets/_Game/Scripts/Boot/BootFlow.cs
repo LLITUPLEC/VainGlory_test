@@ -354,6 +354,7 @@ namespace Ashfold
             back.GetComponentInChildren<Text>().fontSize = 20;
 
             _emailPanel.SetActive(false);
+            KeyboardLift.Attach(_loginRoot.GetComponent<RectTransform>());
         }
 
         static void EnsureEventSystem()

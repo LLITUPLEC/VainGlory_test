@@ -21,6 +21,7 @@ namespace Ashfold
             canvas.renderMode = RenderMode.WorldSpace;
             canvas.overrideSorting = true;
             canvas.sortingOrder = 80;
+            AppUi.DisableWorldRaycasts(go);
 
             var rt = go.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(1.6f, 0.18f);

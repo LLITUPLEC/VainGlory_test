@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/ashfold/server/match"
@@ -11,9 +12,10 @@ import (
 )
 
 const (
-	rpcHealth   = "ashfold_health"
+	rpcHealth           = "ashfold_health"
 	rpcCreateDebugMatch = "ashfold_create_debug_match"
-	matchName   = "ashfold_3v3"
+	rpcFindUser         = "ashfold_find_user"
+	matchName           = "ashfold_3v3"
 )
 
 // InitModule — точка входа Go-плагина Nakama.
@@ -34,6 +36,10 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		return err
 	}
 
+	if err := initializer.RegisterRpc(rpcFindUser, rpcFindUserHandler); err != nil {
+		return err
+	}
+
 	if err := initializer.RegisterMatchmakerMatched(func(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, entries []runtime.MatchmakerEntry) (string, error) {
 		logger.Info("Ashfold matchmaker matched count=%d", len(entries))
 		matchID, err := nk.MatchCreate(ctx, matchName, map[string]interface{}{
@@ -48,7 +54,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		return err
 	}
 
-	logger.Info("Ashfold registered match=%s rpc=%s,%s matchmaker", matchName, rpcHealth, rpcCreateDebugMatch)
+	logger.Info("Ashfold registered match=%s rpc=%s,%s,%s matchmaker", matchName, rpcHealth, rpcCreateDebugMatch, rpcFindUser)
 	return nil
 }
 
@@ -59,6 +65,37 @@ func rpcHealthHandler(ctx context.Context, logger runtime.Logger, db *sql.DB, nk
 		"time":    time.Now().UTC().Format(time.RFC3339),
 		"match":   matchName,
 	})
+	return string(out), nil
+}
+
+func rpcFindUserHandler(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	var in struct {
+		Username string `json:"username"`
+	}
+	if payload != "" {
+		if err := json.Unmarshal([]byte(payload), &in); err != nil {
+			return "", runtime.NewError("bad payload", 3)
+		}
+	}
+	username := strings.TrimSpace(in.Username)
+	if username == "" {
+		return `{"id":"","username":""}`, nil
+	}
+
+	var id, uname string
+	err := db.QueryRowContext(ctx,
+		`SELECT id, username FROM users WHERE lower(username) = lower($1) LIMIT 1`,
+		username,
+	).Scan(&id, &uname)
+	if err == sql.ErrNoRows {
+		return `{"id":"","username":""}`, nil
+	}
+	if err != nil {
+		logger.Error("ashfold_find_user: %v", err)
+		return "", runtime.NewError("lookup failed", 13)
+	}
+
+	out, _ := json.Marshal(map[string]string{"id": id, "username": uname})
 	return string(out), nil
 }
 

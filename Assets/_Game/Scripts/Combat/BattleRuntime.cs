@@ -14,6 +14,16 @@ namespace Ashfold
         public CombatUnit CrystalDusk;
         public bool MatchOver;
         public float MatchTime;
+        public float Countdown;
+        public const float CountdownSeconds = 10f;
+
+        public bool InPrep => Countdown > 0f;
+        public bool Frozen => MatchOver || InPrep;
+
+        public void BeginCountdown(float seconds = CountdownSeconds)
+        {
+            Countdown = Mathf.Max(0.05f, seconds);
+        }
 
         void Awake()
         {
@@ -22,8 +32,16 @@ namespace Ashfold
 
         void Update()
         {
-            if (!MatchOver)
-                MatchTime += Time.deltaTime;
+            if (MatchOver)
+                return;
+            if (Countdown > 0f)
+            {
+                Countdown -= Time.deltaTime;
+                if (Countdown < 0f)
+                    Countdown = 0f;
+                return;
+            }
+            MatchTime += Time.deltaTime;
         }
 
         void OnDestroy()

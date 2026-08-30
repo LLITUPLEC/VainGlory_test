@@ -34,6 +34,11 @@ namespace Ashfold
 
             try
             {
+                if (!await conn.EnsureSessionAsync())
+                {
+                    ApplyLocal(profile);
+                    return;
+                }
                 var result = await conn.Client.ReadStorageObjectsAsync(conn.Session, new IApiReadStorageObjectId[]
                 {
                     new StorageObjectId
@@ -80,6 +85,8 @@ namespace Ashfold
 
             try
             {
+                if (!await conn.EnsureSessionAsync())
+                    return;
                 await WriteAsync(conn, blob);
             }
             catch (Exception e)

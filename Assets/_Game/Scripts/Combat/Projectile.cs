@@ -72,7 +72,7 @@ namespace Ashfold
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             go.name = "Bolt";
-            Object.Destroy(go.GetComponent<Collider>());
+            StripCollider(go);
             go.transform.position = owner.transform.position + Vector3.up * 1.15f;
             go.transform.localScale = Vector3.one * 0.4f;
             go.GetComponent<Renderer>().sharedMaterial = RuntimeMat.Make(color);
@@ -94,7 +94,7 @@ namespace Ashfold
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             go.name = "Skillshot";
-            Object.Destroy(go.GetComponent<Collider>());
+            StripCollider(go);
             go.transform.position = owner.transform.position + Vector3.up * 1.1f + dir.normalized * 0.8f;
             go.transform.localScale = Vector3.one * 0.45f;
             go.GetComponent<Renderer>().sharedMaterial = RuntimeMat.Make(color);
@@ -107,6 +107,13 @@ namespace Ashfold
             p.HitRadius = 0.9f;
             dir.y = 0f;
             p.Direction = dir.sqrMagnitude > 0.01f ? dir.normalized : owner.transform.forward;
+        }
+
+        static void StripCollider(GameObject go)
+        {
+            var col = go.GetComponent<Collider>();
+            if (col != null)
+                Object.DestroyImmediate(col);
         }
     }
 }

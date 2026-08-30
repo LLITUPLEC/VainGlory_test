@@ -23,6 +23,7 @@ namespace Ashfold
 
         void Awake()
         {
+            AppUi.PurgeBattleLeftovers();
             AppUi.EnsureEventSystem();
             _runtime = gameObject.AddComponent<BattleRuntime>();
             _stats = gameObject.AddComponent<MatchStatsTracker>();
@@ -96,6 +97,9 @@ namespace Ashfold
             var cam = Camera.main;
             if (cam != null && _hero != null)
             {
+                var oldFollow = cam.GetComponents<IsoFollowCamera>();
+                for (var i = 0; i < oldFollow.Length; i++)
+                    Object.DestroyImmediate(oldFollow[i]);
                 cam.clearFlags = CameraClearFlags.SolidColor;
                 cam.backgroundColor = map.Root != null && map.Root.GetComponent<FoldMapAuthoring>() != null
                     ? new Color(0.82f, 0.68f, 0.45f)
@@ -114,6 +118,8 @@ namespace Ashfold
                     _hud.SetHint(Loc.T("hud.hint_net"));
                 TutorialCoach.TryStartBattle();
             }
+
+            _runtime.BeginCountdown(BattleRuntime.CountdownSeconds);
 
             if (_networked)
                 HookSocket();

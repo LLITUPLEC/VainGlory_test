@@ -26,10 +26,15 @@ namespace Ashfold
         public float GroundY = 1f;
 
         public float Resist;
+        public float MagResist;
         public int NetId;
         public System.Action Damaged;
         public float LastHeroCombatAt;
         public const float HeroCombatReveal = 2f;
+        public CombatUnit LastHitBy;
+        public float LastHitAt;
+        public float SlowUntil;
+        public float SlowFactor;
 
         public bool DisableOnDeath = true;
 
@@ -37,6 +42,7 @@ namespace Ashfold
         public bool Stunned => Time.time < StunUntil;
         public float Hp01 => MaxHp <= 0f ? 0f : Mathf.Clamp01(Hp / MaxHp);
         public bool InHeroCombat => LastHeroCombatAt > 0f && Time.time - LastHeroCombatAt < HeroCombatReveal;
+        public float MoveMul => Time.time < SlowUntil ? Mathf.Clamp(1f - SlowFactor, 0.25f, 1f) : 1f;
 
         public System.Action<CombatUnit, CombatUnit> Killed;
 
@@ -49,6 +55,25 @@ namespace Ashfold
         void OnDisable()
         {
             All.Remove(this);
+        }
+
+        public static void PurgeDead()
+        {
+            for (var i = All.Count - 1; i >= 0; i--)
+            {
+                if (All[i] == null)
+                    All.RemoveAt(i);
+            }
+        }
+
+        /// <summary>Лечение умений: живые герои-игроки своей команды. Не турели, не крипы, не боты.</summary>
+        public static bool CanReceiveHeroHeal(CombatUnit healer, CombatUnit target)
+        {
+            if (healer == null || target == null || !target.IsAlive)
+                return false;
+            if (target.IsStructure || !target.IsHero || !target.IsPlayer)
+                return false;
+            return target.Team == healer.Team;
         }
 
         public bool IsEnemy(CombatUnit other)
@@ -74,6 +99,14 @@ namespace Ashfold
             StunUntil = Mathf.Max(StunUntil, Time.time + seconds);
         }
 
+        public void ApplySlow(float seconds, float factor)
+        {
+            if (seconds <= 0f || factor <= 0f)
+                return;
+            SlowUntil = Mathf.Max(SlowUntil, Time.time + seconds);
+            SlowFactor = Mathf.Max(SlowFactor, Mathf.Clamp01(factor));
+        }
+
         public static void MarkHeroFight(CombatUnit a, CombatUnit b)
         {
             if (a == null || b == null || a == b)
@@ -94,10 +127,21 @@ namespace Ashfold
 
         public void ApplyDamage(float amount, CombatUnit source)
         {
+            ApplyDamage(amount, source, DamageKind.Physical);
+        }
+
+        public void ApplyDamage(float amount, CombatUnit source, DamageKind kind)
+        {
             if (!IsAlive || amount <= 0f)
                 return;
             MarkHeroFight(this, source);
-            amount *= 1f - Mathf.Clamp01(Resist);
+            if (source != null)
+            {
+                LastHitBy = source;
+                LastHitAt = Time.time;
+            }
+            var resist = kind == DamageKind.Magical ? MagResist : Resist;
+            amount *= 1f - Mathf.Clamp01(resist);
             Hp -= amount;
             Damaged?.Invoke();
             if (!NetBattle())
@@ -106,7 +150,16 @@ namespace Ashfold
                 return;
             Hp = 0f;
             Killed?.Invoke(this, source);
-            if (source != null && Bounty > 0)
+            GrantRewards(source);
+            if (DisableOnDeath && !(IsHero && IsPlayer))
+                gameObject.SetActive(false);
+        }
+
+        void GrantRewards(CombatUnit source)
+        {
+            if (source == null)
+                return;
+            if (Bounty > 0)
             {
                 if (source.IsPlayer && BattleRuntime.I != null)
                     BattleRuntime.I.AddGold(Bounty);
@@ -117,8 +170,12 @@ namespace Ashfold
                         bot.AddGold(Bounty);
                 }
             }
-            if (DisableOnDeath && !(IsHero && IsPlayer))
-                gameObject.SetActive(false);
+            var xp = HeroRules.XpForKill(this);
+            if (xp <= 0)
+                return;
+            var prog = source.GetComponent<HeroProgression>();
+            if (prog != null)
+                prog.AddXp(xp);
         }
     }
 }

@@ -123,8 +123,8 @@ namespace Ashfold
         {
             if (_en != null)
                 return;
-            _en = new Dictionary<string, string>(128);
-            _ru = new Dictionary<string, string>(128);
+            _en = new Dictionary<string, string>(256);
+            _ru = new Dictionary<string, string>(256);
             Add("boot.subtitle", "BATTLE FOR THE FOLD  ·  3v3", "БИТВА ЗА FOLD  ·  3v3");
             Add("boot.init", "Initializing…", "Инициализация…");
             Add("boot.init_client", "Initializing client…", "Запуск клиента…");
@@ -160,6 +160,7 @@ namespace Ashfold
 
             Add("hall.guest", "Guest", "Гость");
             Add("hall.play", "PLAY", "ИГРАТЬ");
+            Add("hall.range", "RANGE", "ПОЛИГОН");
             Add("hall.heroes", "HEROES", "ГЕРОИ");
             Add("hall.shop", "SHOP", "МАГАЗИН");
             Add("hall.friends", "FRIENDS", "ДРУЗЬЯ");
@@ -197,6 +198,11 @@ namespace Ashfold
             Add("social.sent", "sent", "исходящая");
             Add("social.recv", "incoming", "входящая");
             Add("social.blocked", "blocked", "блок");
+            Add("social.not_found", "Player not found", "Игрок не найден");
+            Add("social.self", "That's your username", "Это ваш ник");
+            Add("social.remove_confirm", "Remove this friend?", "Точно удалить из друзей?");
+            Add("social.yes", "YES", "ДА");
+            Add("social.no", "NO", "НЕТ");
 
             Add("account.title", "ACCOUNT", "АККАУНТ");
             Add("account.close", "CLOSE", "ЗАКРЫТЬ");
@@ -228,6 +234,15 @@ namespace Ashfold
             Add("hero.bastion.skill", "Bulwark", "Оплот");
             Add("hero.vesper.skill", "Bolt", "Залп");
             Add("hero.mira.skill", "Mend", "Исцеление");
+            Add("hero.bastion.a", "Bulwark", "Оплот");
+            Add("hero.bastion.b", "Guard Break", "Пробой");
+            Add("hero.bastion.c", "Earthsplit", "Раскол");
+            Add("hero.vesper.a", "Bolt", "Залп");
+            Add("hero.vesper.b", "Pinshot", "Зацеп");
+            Add("hero.vesper.c", "Comet", "Комета");
+            Add("hero.mira.a", "Mend", "Исцеление");
+            Add("hero.mira.b", "Bind", "Связь");
+            Add("hero.mira.c", "Bloom", "Цветение");
 
             Add("item.iron_edge.name", "Iron Edge", "Железный клинок");
             Add("item.storm_charm.name", "Storm Charm", "Штормовой талисман");
@@ -289,7 +304,7 @@ namespace Ashfold
             Add("results.stage", "STAGE 4  ·  RESULTS", "ЭТАП 4  ·  РЕЗУЛЬТАТЫ");
 
             Add("hud.items_empty", "ITEMS —", "ПРЕДМЕТЫ —");
-            Add("hud.hint", "LMB attack  ·  minimap ping  ·  Alt+LMB  ·  Q  ·  B shop  ·  R recall", "ЛКМ атака  ·  пинг на миникарте  ·  Alt+ЛКМ  ·  Q  ·  B магазин  ·  R возврат");
+            Add("hud.hint", "LMB attack  ·  Q/W/E skills  ·  Shift+Q/W/E upgrade  ·  B shop  ·  R recall", "ЛКМ атака  ·  Q/W/E умения  ·  Shift+Q/W/E прокачка  ·  B магазин  ·  R возврат");
             Add("hud.hint_net", "LMB move / attack  ·  minimap ping  ·  Alt+LMB  ·  10 Hz", "ЛКМ ход / атака  ·  пинг на миникарте  ·  Alt+ЛКМ  ·  10 Гц");
             Add("hud.reconnecting", "RECONNECTING  {0}s", "ПЕРЕПОДКЛЮЧЕНИЕ  {0} с");
             Add("hud.rejoin_fail", "Reconnect failed", "Не удалось переподключиться");
@@ -300,8 +315,36 @@ namespace Ashfold
             Add("hud.dead", "DEAD", "МЁРТВ");
             Add("hud.shop_fountain", "Shop only at fountain  ·  R to recall", "Магазин только у фонтана  ·  R для возврата");
             Add("hud.recalling", "Recalling…  {0:0.0}s", "Возврат…  {0:0.0}с");
-            Add("hud.fountain", "FOUNTAIN  ·  B shop  ·  Q skill", "ФОНТАН  ·  B магазин  ·  Q умение");
-            Add("hud.stage", "STAGE 6.5  ·  TUTORIAL", "ЭТАП 6.5  ·  ТУТОРИАЛ");
+            Add("hud.fountain", "FOUNTAIN  ·  B shop  ·  Q/W/E skills", "ФОНТАН  ·  B магазин  ·  Q/W/E умения");
+            Add("hud.level", "LV {0}", "УР {0}");
+            Add("hud.skill_pts", "+{0}", "+{0}");
+            Add("hud.locked", "LOCKED", "ЗАКРЫТО");
+            Add("hud.aim_ground", "Tap the map to place the ability  ·  Q/W/E again to cancel", "Нажми на карту, куда падёт умение  ·  Q/W/E ещё раз — отмена");
+            Add("hud.ult_locked", "ULT  ·  LV {0}", "УЛЬТА  ·  УР {0}");
+            Add("hud.fight", "FIGHT", "В БОЙ");
+
+            Add("sandbox.title", "RANGE  ·  3v3 MAP", "ПОЛИГОН  ·  КАРТА 3v3");
+            Add("sandbox.hero", "HERO", "ГЕРОЙ");
+            Add("sandbox.target", "TARGET", "ЦЕЛЬ");
+            Add("sandbox.act", "BEHAVIOR", "ПОВЕДЕНИЕ");
+            Add("sandbox.dummy_hero", "ENEMY HERO", "ГЕРОЙ-ЦЕЛЬ");
+            Add("sandbox.max", "MAX SKILLS", "МАКС. УМЕНИЯ");
+            Add("sandbox.fresh", "RESET SKILLS", "СБРОС УМЕНИЙ");
+            Add("sandbox.heal", "HEAL / CD", "ХИЛ / КД");
+            Add("sandbox.cds", "RESET CD", "СБРОС КД");
+            Add("sandbox.immortal", "IMMORTAL", "БЕССМЕРТИЕ");
+            Add("sandbox.rings", "RANGES", "РАДИУСЫ");
+            Add("sandbox.on", "ON", "ВКЛ");
+            Add("sandbox.off", "OFF", "ВЫКЛ");
+            Add("sandbox.status", "{0}  ·  {1}  ·  {2}\nHP {3}  ·  {4}m  ·  {5}", "{0}  ·  {1}  ·  {2}\nHP {3}  ·  {4}м  ·  {5}");
+            Add("sandbox.kind.post", "Dummy", "Манекен");
+            Add("sandbox.kind.minion", "Minion", "Крип");
+            Add("sandbox.kind.jungle", "Jungle", "Лес");
+            Add("sandbox.kind.hero", "Hero", "Герой");
+            Add("sandbox.kind.kraken", "Kraken", "Кракен");
+            Add("sandbox.act.idle", "Idle", "Стоит");
+            Add("sandbox.act.attack", "Attack", "Атакует");
+            Add("sandbox.act.flee", "Flee", "Убегает");
             Add("shop.fountain", "FOUNTAIN SHOP  ·  {0} G", "МАГАЗИН ФОНТАНА  ·  {0} G");
             Add("shop.close", "CLOSE", "ЗАКРЫТЬ");
 
@@ -309,7 +352,7 @@ namespace Ashfold
             Add("tut.hall", "PLAY — Casual 3v3. Pick a hero, then fight on the lane.", "PLAY — обычный 3v3. Выбери героя и выходи на линию.");
             Add("tut.move", "Tap the ground to move.", "Нажми на землю, чтобы идти.");
             Add("tut.attack", "Tap an enemy to attack.", "Нажми на врага, чтобы атаковать.");
-            Add("tut.skill", "Q — your ability. Wait for the cooldown.", "Q — умение. Жди перезарядку.");
+            Add("tut.skill", "Q / W / E — abilities. Spend a point to learn them. Ultimate unlocks at 6.", "Q / W / E — умения. Очко — чтобы выучить. Ульта открывается на 6 уровне.");
             Add("tut.shop", "Spend gold at the fountain (B / Shop). R recalls you home.", "Золото тратится у фонтана (B / Магазин). R — возврат на базу.");
             Add("tut.brush", "Bushes hide you from enemies. After a hero fight you stay visible 2s.", "Кусты скрывают от врагов. После боя с героем ты виден ещё 2 с.");
             Add("tut.ping", "Ping the minimap so allies see the call. Break the crystal to win.", "Пинг по миникарте виден союзникам. Сломай кристалл — победа.");

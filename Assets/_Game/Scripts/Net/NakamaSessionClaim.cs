@@ -23,6 +23,8 @@ namespace Ashfold
         {
             if (conn == null || conn.Session == null || string.IsNullOrEmpty(deviceId))
                 return;
+            if (!await conn.EnsureSessionAsync())
+                return;
             try
             {
                 var json = JsonUtility.ToJson(new Blob
@@ -52,6 +54,8 @@ namespace Ashfold
         public static async Task<bool> TakenOverAsync(NakamaConnection conn, string deviceId)
         {
             if (conn == null || conn.Session == null || string.IsNullOrEmpty(deviceId))
+                return false;
+            if (!await conn.EnsureSessionAsync())
                 return false;
             try
             {

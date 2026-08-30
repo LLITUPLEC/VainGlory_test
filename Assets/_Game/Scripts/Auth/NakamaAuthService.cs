@@ -44,7 +44,8 @@ namespace Ashfold
             await _conn.AuthenticateDeviceAsync(deviceId, username);
             try
             {
-                await _conn.Client.UpdateAccountAsync(_conn.Session, username, name, null, null, null);
+                if (await _conn.EnsureSessionAsync())
+                    await _conn.Client.UpdateAccountAsync(_conn.Session, username, name, null, null, null);
             }
             catch (Exception e)
             {

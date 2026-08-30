@@ -11,7 +11,8 @@ namespace Ashfold
         public float StunUntil;
         public bool Locked;
 
-        public bool CanMove => !Locked && Time.time >= StunUntil && enabled && isActiveAndEnabled;
+        public bool CanMove => !Locked && Time.time >= StunUntil && enabled && isActiveAndEnabled
+            && (BattleRuntime.I == null || !BattleRuntime.I.InPrep);
 
         public void MoveTo(Vector3 world)
         {
@@ -49,11 +50,17 @@ namespace Ashfold
             if (!CanMove || !HasOrder)
                 return;
 
-            var next = Vector3.MoveTowards(transform.position, Destination, Speed * Time.deltaTime);
+            var next = Vector3.MoveTowards(transform.position, Destination, Speed * MoveMul() * Time.deltaTime);
             transform.position = next;
             Face(Destination);
             if ((transform.position - Destination).sqrMagnitude < 0.04f)
                 HasOrder = false;
+        }
+
+        float MoveMul()
+        {
+            var unit = GetComponent<CombatUnit>();
+            return unit != null ? unit.MoveMul : 1f;
         }
     }
 }

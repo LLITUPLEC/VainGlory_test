@@ -130,6 +130,8 @@ namespace Ashfold
             var statusBox = UiFactory.Box(sheet.transform, new Vector2(0.03f, 0.02f), new Vector2(0.97f, 0.09f), Vector2.zero, Vector2.zero, Color.clear, "St");
             _status = UiFactory.Label(statusBox.transform, "", 14, GameTheme.Crimson, TextAnchor.MiddleLeft);
 
+            KeyboardLift.Attach(sheet.rectTransform);
+
             var social = Soc();
             if (social != null)
                 social.Changed += Refresh;
@@ -173,7 +175,7 @@ namespace Ashfold
             var social = Soc();
             if (social == null)
                 return;
-                _status.text = social.Status;
+            _status.text = social.Status;
             if (_inviteBar != null)
                 _inviteBar.SetActive(!string.IsNullOrEmpty(social.PendingInvite));
 
@@ -229,24 +231,20 @@ namespace Ashfold
             var caption = NakamaSocial.FriendLabel(friend);
             if (!string.IsNullOrEmpty(stateKey))
                 caption += "  " + Loc.T(stateKey);
-            UiFactory.Label(row.transform, caption, 14, GameTheme.Text, TextAnchor.MiddleLeft);
-            UiFactory.Stretch(row.GetComponentInChildren<Text>().rectTransform, 8, 2);
-            row.GetComponentInChildren<Text>().alignment = TextAnchor.MiddleLeft;
+            var nameLabel = UiFactory.Label(row.transform, caption, 14, GameTheme.Text, TextAnchor.MiddleLeft);
+            UiFactory.SetAnchors(nameLabel.rectTransform, Vector2.zero, new Vector2(0.50f, 1f), new Vector2(8, 2), new Vector2(-4, -2));
 
             var uid = friend.User.Id;
             var social = Soc();
-            var x = 0.70f;
             if (friend.State == 2)
-            {
-                Mini(row.transform, x, Loc.T("social.accept"), () => StartCoroutine(Run(uid, s => s.AcceptAsync(uid))), GameTheme.Gold, GameTheme.Bg);
-                x = 0.85f;
-            }
+                Mini(row.transform, 0.52f, Loc.T("social.accept"), () => StartCoroutine(Run(uid, s => s.AcceptAsync(uid))), GameTheme.Gold, GameTheme.Bg);
             else if (friend.State == 0 && social != null && social.InParty && social.PartySize < NakamaSocial.PartyMax)
-            {
-                Mini(row.transform, x, Loc.T("social.invite"), () => StartCoroutine(Run(uid, s => s.InviteFriendAsync(uid))), GameTheme.Teal, GameTheme.Bg);
-                x = 0.85f;
-            }
-            Mini(row.transform, x, "✕", () => StartCoroutine(Run(uid, s => s.RemoveAsync(uid))), GameTheme.Crimson, GameTheme.Text);
+                Mini(row.transform, 0.52f, Loc.T("social.invite"), () => StartCoroutine(Run(uid, s => s.InviteFriendAsync(uid))), GameTheme.Teal, GameTheme.Bg);
+
+            if (friend.State == 0)
+                Mini(row.transform, 0.84f, "✕", () => AskRemove(uid), GameTheme.Crimson, GameTheme.Text);
+            else
+                Mini(row.transform, 0.84f, "✕", () => StartCoroutine(Run(uid, s => s.RemoveAsync(uid))), GameTheme.Crimson, GameTheme.Text);
         }
 
         void DrawMember(Nakama.IUserPresence p, int index, string me, NakamaSocial social)
@@ -267,8 +265,31 @@ namespace Ashfold
             if (social.IsLeader && p.UserId != me)
             {
                 var presence = p;
-                Mini(row.transform, 0.78f, "✕", () => StartCoroutine(Run("", s => s.KickAsync(presence))), GameTheme.Crimson, GameTheme.Text);
+                Mini(row.transform, 0.84f, "✕", () => StartCoroutine(Run("", s => s.KickAsync(presence))), GameTheme.Crimson, GameTheme.Text);
             }
+        }
+
+        void AskRemove(string uid)
+        {
+            var canvas = AppUi.OverlayCanvas("FriendRemoveConfirm", 50);
+            UiFactory.Panel(canvas.transform, GameTheme.Hex(0x000000, 0.55f), "Dim");
+            var sheet = UiFactory.Box(canvas.transform, new Vector2(0.18f, 0.34f), new Vector2(0.82f, 0.66f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Sheet");
+            UiFactory.Label(
+                UiFactory.Box(sheet.transform, new Vector2(0.06f, 0.48f), new Vector2(0.94f, 0.88f), Vector2.zero, Vector2.zero, Color.clear, "Msg").transform,
+                Loc.T("social.remove_confirm"),
+                20, GameTheme.Text, TextAnchor.MiddleCenter, FontStyle.Normal, true);
+
+            var yes = UiFactory.Button(sheet.transform, Loc.T("social.yes"), () =>
+            {
+                Object.Destroy(canvas.gameObject);
+                StartCoroutine(Run(uid, s => s.RemoveAsync(uid)));
+            }, GameTheme.Crimson, GameTheme.Text);
+            UiFactory.SetAnchors(yes.GetComponent<RectTransform>(), new Vector2(0.08f, 0.10f), new Vector2(0.48f, 0.38f), new Vector2(6, 4), new Vector2(-6, -4));
+            yes.GetComponentInChildren<Text>().fontSize = 18;
+
+            var no = UiFactory.Button(sheet.transform, Loc.T("social.no"), () => Object.Destroy(canvas.gameObject), GameTheme.BgPanelSoft, GameTheme.Text);
+            UiFactory.SetAnchors(no.GetComponent<RectTransform>(), new Vector2(0.52f, 0.10f), new Vector2(0.92f, 0.38f), new Vector2(6, 4), new Vector2(-6, -4));
+            no.GetComponentInChildren<Text>().fontSize = 18;
         }
 
         static void Mini(Transform parent, float x, string caption, UnityEngine.Events.UnityAction action, Color bg, Color fg)

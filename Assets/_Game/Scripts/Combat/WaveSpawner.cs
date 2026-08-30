@@ -16,7 +16,7 @@ namespace Ashfold
 
         void Update()
         {
-            if (BattleRuntime.I != null && BattleRuntime.I.MatchOver)
+            if (BattleRuntime.I != null && BattleRuntime.I.Frozen)
                 return;
             _next -= Time.deltaTime;
             if (_next > 0f)

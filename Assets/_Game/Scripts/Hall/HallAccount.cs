@@ -12,7 +12,7 @@ namespace Ashfold
         {
             var canvas = AppUi.OverlayCanvas("AccountOverlay");
             UiFactory.Panel(canvas.transform, GameTheme.Hex(0x000000, 0.78f), "Dim");
-            var sheet = UiFactory.Box(canvas.transform, new Vector2(0.22f, 0.18f), new Vector2(0.78f, 0.82f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Sheet");
+            var sheet = UiFactory.Box(canvas.transform, new Vector2(0.16f, 0.30f), new Vector2(0.84f, 0.92f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Sheet");
 
             var titleBox = UiFactory.Box(sheet.transform, new Vector2(0.04f, 0.88f), new Vector2(0.62f, 0.98f), Vector2.zero, Vector2.zero, Color.clear, "Title");
             UiFactory.Label(titleBox.transform, Loc.T("account.title"), 28, GameTheme.Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
@@ -59,6 +59,8 @@ namespace Ashfold
                 }, GameTheme.Gold, GameTheme.Bg);
                 UiFactory.SetAnchors(link.GetComponent<RectTransform>(), new Vector2(0.08f, 0.24f), new Vector2(0.92f, 0.36f), Vector2.zero, Vector2.zero);
                 link.GetComponentInChildren<Text>().fontSize = 20;
+
+                KeyboardLift.Attach(sheet.rectTransform);
             }
             else
             {
@@ -68,14 +70,17 @@ namespace Ashfold
                     18, GameTheme.TextMuted, TextAnchor.MiddleCenter, FontStyle.Normal, true);
             }
 
-            var signOut = UiFactory.Button(sheet.transform, Loc.T("account.sign_out"), () =>
+            if (profile != null && profile.HasEmail)
             {
-                GameSession.I.SignOut();
-                Object.Destroy(canvas.gameObject);
-                SceneManager.LoadScene(AppScenes.Boot);
-            }, GameTheme.Crimson, GameTheme.Text);
-            UiFactory.SetAnchors(signOut.GetComponent<RectTransform>(), new Vector2(0.25f, 0.17f), new Vector2(0.75f, 0.23f), Vector2.zero, Vector2.zero);
-            signOut.GetComponentInChildren<Text>().fontSize = 16;
+                var signOut = UiFactory.Button(sheet.transform, Loc.T("account.sign_out"), () =>
+                {
+                    GameSession.I.SignOut();
+                    Object.Destroy(canvas.gameObject);
+                    SceneManager.LoadScene(AppScenes.Boot);
+                }, GameTheme.Crimson, GameTheme.Text);
+                UiFactory.SetAnchors(signOut.GetComponent<RectTransform>(), new Vector2(0.25f, 0.17f), new Vector2(0.75f, 0.23f), Vector2.zero, Vector2.zero);
+                signOut.GetComponentInChildren<Text>().fontSize = 16;
+            }
         }
 
         static void OpenLanguagePicker()

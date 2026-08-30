@@ -30,6 +30,12 @@ namespace Ashfold
                     Motor.Stop();
                 return;
             }
+            if (BattleRuntime.I != null && BattleRuntime.I.InPrep)
+            {
+                if (Motor != null)
+                    Motor.Stop();
+                return;
+            }
 
             _cd -= Time.deltaTime;
             if (!RoamLane && DistFlat(transform.position, _home) > 8f)
@@ -42,7 +48,7 @@ namespace Ashfold
             if (_target != null && !_target.IsAlive)
                 _target = null;
             if (_target == null)
-                _target = FindTarget(Aggro);
+                _target = AggroRules.Pick(Unit, Aggro, RoamLane ? AggroKind.Lane : AggroKind.Jungle);
 
             if (_target != null)
             {
@@ -75,39 +81,6 @@ namespace Ashfold
             a.y = 0f;
             b.y = 0f;
             return Vector3.Distance(a, b);
-        }
-
-        CombatUnit FindTarget(float radius)
-        {
-            CombatUnit bestUnit = null;
-            CombatUnit bestStruct = null;
-            var bestUnitSq = radius * radius;
-            var bestStructSq = radius * radius;
-            var origin = transform.position;
-            foreach (var u in CombatUnit.All)
-            {
-                if (!Unit.IsEnemy(u))
-                    continue;
-                var d = u.transform.position - origin;
-                d.y = 0f;
-                var sq = d.sqrMagnitude;
-                if (sq > radius * radius)
-                    continue;
-                if (u.IsStructure)
-                {
-                    if (sq < bestStructSq)
-                    {
-                        bestStructSq = sq;
-                        bestStruct = u;
-                    }
-                }
-                else if (sq < bestUnitSq)
-                {
-                    bestUnitSq = sq;
-                    bestUnit = u;
-                }
-            }
-            return bestUnit != null ? bestUnit : bestStruct;
         }
     }
 }

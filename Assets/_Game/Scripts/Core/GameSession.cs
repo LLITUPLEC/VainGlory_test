@@ -62,22 +62,32 @@ namespace Ashfold
         IEnumerator WatchSessionClaim()
         {
             yield return new WaitForSeconds(3f);
+            var delay = 6f;
             while (true)
             {
-                if (IsAuthenticated && NakamaConfig.UseServer && Nakama != null && Nakama.IsConnected && Auth != null)
+                if (IsAuthenticated && NakamaConfig.UseServer && Nakama != null && Auth != null && Nakama.Session != null)
                 {
-                    var device = Auth.DeviceId;
-                    var task = NakamaSessionClaim.TakenOverAsync(Nakama, device);
-                    while (!task.IsCompleted)
+                    var ready = Nakama.EnsureSessionAsync();
+                    while (!ready.IsCompleted)
                         yield return null;
-                    if (task.Status == TaskStatus.RanToCompletion && task.Result)
+                    if (ready.Status == TaskStatus.RanToCompletion && ready.Result)
                     {
-                        NakamaSessionClaim.MarkKicked();
-                        SignOut();
-                        SceneManager.LoadScene(AppScenes.Boot);
+                        delay = 6f;
+                        var device = Auth.DeviceId;
+                        var task = NakamaSessionClaim.TakenOverAsync(Nakama, device);
+                        while (!task.IsCompleted)
+                            yield return null;
+                        if (task.Status == TaskStatus.RanToCompletion && task.Result)
+                        {
+                            NakamaSessionClaim.MarkKicked();
+                            SignOut();
+                            SceneManager.LoadScene(AppScenes.Boot);
+                        }
                     }
+                    else
+                        delay = Mathf.Min(delay * 2f, 60f);
                 }
-                yield return new WaitForSeconds(6f);
+                yield return new WaitForSeconds(delay);
             }
         }
 

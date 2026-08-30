@@ -26,6 +26,22 @@ namespace Ashfold
         static Transform _root;
         static int _stagger;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics()
+        {
+            Pool.Clear();
+            _root = null;
+            _stagger = 0;
+        }
+
+        public static void ClearWorld()
+        {
+            Pool.Clear();
+            if (_root != null)
+                Object.Destroy(_root.gameObject);
+            _root = null;
+        }
+
         Text _fill;
         Text[] _stroke;
         float _age;
@@ -87,6 +103,7 @@ namespace Ashfold
             canvas.renderMode = RenderMode.WorldSpace;
             canvas.overrideSorting = true;
             canvas.sortingOrder = 95;
+            AppUi.DisableWorldRaycasts(go);
             var rt = go.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(180f, 70f);
             go.transform.localScale = Vector3.one * 0.0125f;

@@ -12,6 +12,8 @@ namespace Ashfold
         public const long OpChat = 1;
         public const long OpQueue = 2;
         public const int PartyMax = 3;
+        const int NotifyFriendRequest = -2;
+        const int NotifyFriendAccept = -3;
 
         readonly object _gate = new object();
         readonly List<IApiFriend> _friends = new List<IApiFriend>(16);
@@ -94,6 +96,23 @@ namespace Ashfold
             get { lock (_gate) return _status ?? ""; }
         }
 
+        public int IncomingFriendCount
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    var n = 0;
+                    for (var i = 0; i < _friends.Count; i++)
+                    {
+                        if (_friends[i] != null && _friends[i].State == 2)
+                            n++;
+                    }
+                    return n;
+                }
+            }
+        }
+
         public void Bind(ISocket socket)
         {
             Unbind();
@@ -107,6 +126,8 @@ namespace Ashfold
             _socket.ReceivedPartyLeader += OnPartyLeader;
             _socket.ReceivedChannelMessage += OnChannelMessage;
             _socket.ReceivedMatchmakerMatched += OnMatched;
+            _socket.ReceivedNotification += OnNotification;
+            var _ = RefreshFriendsAsync();
         }
 
         public void Unbind()
@@ -120,6 +141,7 @@ namespace Ashfold
             _socket.ReceivedPartyLeader -= OnPartyLeader;
             _socket.ReceivedChannelMessage -= OnChannelMessage;
             _socket.ReceivedMatchmakerMatched -= OnMatched;
+            _socket.ReceivedNotification -= OnNotification;
             _socket = null;
         }
 
@@ -144,6 +166,8 @@ namespace Ashfold
         {
             var nk = Conn();
             if (nk == null || nk.Session == null)
+                return;
+            if (!await nk.EnsureSessionAsync())
                 return;
             try
             {
@@ -171,9 +195,24 @@ namespace Ashfold
             var nk = Conn();
             if (nk == null || string.IsNullOrWhiteSpace(username))
                 return;
+            var query = username.Trim();
             try
             {
-                await nk.Client.AddFriendsAsync(nk.Session, null, new[] { username.Trim() });
+                if (!await nk.EnsureSessionAsync())
+                    return;
+                var userId = await ResolveUserIdAsync(nk, query);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    SetStatus(Loc.T("social.not_found"));
+                    return;
+                }
+                if (userId == LocalId())
+                {
+                    SetStatus(Loc.T("social.self"));
+                    return;
+                }
+                await nk.Client.AddFriendsAsync(nk.Session, new[] { userId }, null);
+                await PingFriendAsync(userId);
                 await RefreshFriendsAsync();
             }
             catch (Exception e)
@@ -189,7 +228,10 @@ namespace Ashfold
                 return;
             try
             {
+                if (!await nk.EnsureSessionAsync())
+                    return;
                 await nk.Client.AddFriendsAsync(nk.Session, new[] { userId }, null);
+                await PingFriendAsync(userId);
                 await RefreshFriendsAsync();
             }
             catch (Exception e)
@@ -205,6 +247,8 @@ namespace Ashfold
                 return;
             try
             {
+                if (!await nk.EnsureSessionAsync())
+                    return;
                 await nk.Client.DeleteFriendsAsync(nk.Session, new[] { userId }, null);
                 await RefreshFriendsAsync();
             }
@@ -356,6 +400,22 @@ namespace Ashfold
             }
         }
 
+        async System.Threading.Tasks.Task PingFriendAsync(string userId)
+        {
+            var socket = Sock();
+            if (socket == null || string.IsNullOrEmpty(userId))
+                return;
+            try
+            {
+                var channel = await socket.JoinChatAsync(userId, ChannelType.DirectMessage, false, true);
+                await socket.WriteChatMessageAsync(channel, JsonUtility.ToJson(new FriendPingDto { friendReq = 1 }));
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Ashfold] Friend ping: " + e.Message);
+            }
+        }
+
         public void DismissInvite()
         {
             lock (_gate)
@@ -504,6 +564,22 @@ namespace Ashfold
                 return;
             if (msg.SenderId == LocalId())
                 return;
+
+            FriendPingDto ping = null;
+            try
+            {
+                ping = JsonUtility.FromJson<FriendPingDto>(msg.Content);
+            }
+            catch
+            {
+                ping = null;
+            }
+            if (ping != null && ping.friendReq > 0)
+            {
+                var _ = RefreshFriendsAsync();
+                return;
+            }
+
             PartyInviteDto invite = null;
             try
             {
@@ -524,6 +600,56 @@ namespace Ashfold
         {
             lock (_gate)
                 _queuedMatch = matched;
+        }
+
+        void OnNotification(IApiNotification notification)
+        {
+            if (notification == null)
+                return;
+            if (notification.Code != NotifyFriendRequest && notification.Code != NotifyFriendAccept)
+                return;
+            var _ = RefreshFriendsAsync();
+        }
+
+        async System.Threading.Tasks.Task<string> ResolveUserIdAsync(NakamaConnection nk, string username)
+        {
+            try
+            {
+                var users = await nk.Client.GetUsersAsync(nk.Session, new string[0], new[] { username });
+                var id = FirstUserId(users);
+                if (!string.IsNullOrEmpty(id))
+                    return id;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Ashfold] GetUsers: " + e.Message);
+            }
+
+            try
+            {
+                var payload = await nk.RpcAsync("ashfold_find_user", JsonUtility.ToJson(new FindUserDto { username = username }));
+                var found = JsonUtility.FromJson<FoundUserDto>(payload);
+                if (found != null && !string.IsNullOrEmpty(found.id))
+                    return found.id;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Ashfold] Find user RPC: " + e.Message);
+            }
+
+            return "";
+        }
+
+        static string FirstUserId(IApiUsers users)
+        {
+            if (users == null || users.Users == null)
+                return "";
+            foreach (var user in users.Users)
+            {
+                if (user != null && !string.IsNullOrEmpty(user.Id))
+                    return user.Id;
+            }
+            return "";
         }
 
         void PushChat(string name, string text)
@@ -600,9 +726,28 @@ namespace Ashfold
         }
 
         [Serializable]
+        sealed class FriendPingDto
+        {
+            public int friendReq;
+        }
+
+        [Serializable]
         sealed class QueueDto
         {
             public int s;
+        }
+
+        [Serializable]
+        sealed class FindUserDto
+        {
+            public string username;
+        }
+
+        [Serializable]
+        sealed class FoundUserDto
+        {
+            public string id;
+            public string username;
         }
     }
 }
