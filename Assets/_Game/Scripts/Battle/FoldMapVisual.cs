@@ -47,12 +47,14 @@ namespace Ashfold
             var gameplay = Group(root, "Gameplay");
             Marker(gameplay, "DawnSpawn", new Vector3(-FoldMapBuilder.HalfLength, 1.35f, 0f));
             Marker(gameplay, "DuskSpawn", new Vector3(FoldMapBuilder.HalfLength, 1.35f, 0f));
-            Prim(gameplay, PrimitiveType.Cylinder, new Vector3(-16f, 1.6f, 0f), new Vector3(1.6f, 1.6f, 1.6f), teal, "TurretDawn", true);
-            Prim(gameplay, PrimitiveType.Cylinder, new Vector3(16f, 1.6f, 0f), new Vector3(1.6f, 1.6f, 1.6f), crimson, "TurretDusk", true);
-            var cd = Prim(gameplay, PrimitiveType.Cube, new Vector3(-FoldMapBuilder.HalfLength - 3.5f, 2.2f, 0f), new Vector3(1.4f, 4.2f, 1.4f), teal, "CrystalDawn", true);
-            cd.transform.rotation = Quaternion.Euler(0f, 45f, 0f);
-            var ck = Prim(gameplay, PrimitiveType.Cube, new Vector3(FoldMapBuilder.HalfLength + 3.5f, 2.2f, 0f), new Vector3(1.4f, 4.2f, 1.4f), crimson, "CrystalDusk", true);
-            ck.transform.rotation = Quaternion.Euler(0f, 45f, 0f);
+            PlaceOrPrim(gameplay, MapModels.TurretRes, "TurretDawn", new Vector3(-16f, 0f, 0f), Quaternion.Euler(0f, 90f, 0f),
+                PrimitiveType.Cylinder, new Vector3(-16f, 1.6f, 0f), new Vector3(1.6f, 1.6f, 1.6f), teal);
+            PlaceOrPrim(gameplay, MapModels.TurretRes, "TurretDusk", new Vector3(16f, 0f, 0f), Quaternion.Euler(0f, -90f, 0f),
+                PrimitiveType.Cylinder, new Vector3(16f, 1.6f, 0f), new Vector3(1.6f, 1.6f, 1.6f), crimson);
+            PlaceOrPrim(gameplay, MapModels.CrystalRes, "CrystalDawn", new Vector3(-FoldMapBuilder.HalfLength - 3.5f, 0f, 0f), Quaternion.Euler(0f, 90f, 0f),
+                PrimitiveType.Cube, new Vector3(-FoldMapBuilder.HalfLength - 3.5f, 2.2f, 0f), new Vector3(1.4f, 4.2f, 1.4f), teal);
+            PlaceOrPrim(gameplay, MapModels.CrystalRes, "CrystalDusk", new Vector3(FoldMapBuilder.HalfLength + 3.5f, 0f, 0f), Quaternion.Euler(0f, -90f, 0f),
+                PrimitiveType.Cube, new Vector3(FoldMapBuilder.HalfLength + 3.5f, 2.2f, 0f), new Vector3(1.4f, 4.2f, 1.4f), crimson);
             Prim(gameplay, PrimitiveType.Sphere, new Vector3(-12f, 0.55f, 13f), Vector3.one * 1.5f, camp, "CampNL", true);
             Prim(gameplay, PrimitiveType.Sphere, new Vector3(12f, 0.55f, 13f), Vector3.one * 1.5f, camp, "CampNR", true);
             Prim(gameplay, PrimitiveType.Sphere, new Vector3(-12f, 0.55f, -13f), Vector3.one * 1.5f, camp, "CampSL", true);
@@ -203,6 +205,16 @@ namespace Ashfold
         static Material Mat(Color c)
         {
             return RuntimeMat.Make(c);
+        }
+
+        static void PlaceOrPrim(Transform parent, string resource, string name, Vector3 pos, Quaternion rot,
+            PrimitiveType fallbackType, Vector3 fallbackPos, Vector3 fallbackScale, Material mat)
+        {
+            if (MapModels.TryPlace(resource, parent, name, pos, rot) != null)
+                return;
+            var go = Prim(parent, fallbackType, fallbackPos, fallbackScale, mat, name, true);
+            if (fallbackType == PrimitiveType.Cube)
+                go.transform.rotation = Quaternion.Euler(0f, 45f, 0f);
         }
 
         static GameObject Prim(Transform parent, PrimitiveType type, Vector3 pos, Vector3 scale, Material mat, string name, bool solid)

@@ -22,16 +22,17 @@ namespace Ashfold
             if (_next > 0f)
                 return;
             _next = Interval;
-            SpawnTeam(TeamId.Dawn, -32f, 1f);
-            SpawnTeam(TeamId.Dusk, 32f, -1f);
+            SpawnTeam(TeamId.Dawn);
+            SpawnTeam(TeamId.Dusk);
         }
 
-        void SpawnTeam(TeamId team, float x, float dir)
+        void SpawnTeam(TeamId team)
         {
-            for (var i = 0; i < 3; i++)
+            var goal = CombatBalance.MinionGoal(team);
+            for (var i = 0; i < CombatBalance.WaveSize; i++)
             {
-                var z = (i - 1) * 1.6f;
-                UnitFactory.SpawnMinion(Parent, new Vector3(x, 0.7f, z), team, new Vector3(dir * 40f, 0.7f, 0f));
+                var captain = i == CombatBalance.WaveSize - 1;
+                UnitFactory.SpawnMinion(Parent, CombatBalance.MinionSpawn(team, i), team, goal, true, captain);
             }
         }
     }

@@ -56,10 +56,10 @@ namespace Ashfold
             if (_networked)
             {
                 _net = gameObject.AddComponent<NetBattleSync>();
-                _runtime.CrystalDawn = UnitFactory.MakeStructure(map.CrystalDawn, TeamId.Dawn, 1400f, 0, "Crystal", false, false);
-                _runtime.CrystalDusk = UnitFactory.MakeStructure(map.CrystalDusk, TeamId.Dusk, 1400f, 200, "Crystal", false, false);
-                var turretDawn = UnitFactory.MakeStructure(map.TurretDawn, TeamId.Dawn, 1100f, 0, "Turret", true, false);
-                var turretDusk = UnitFactory.MakeStructure(map.TurretDusk, TeamId.Dusk, 1100f, 120, "Turret", true, false);
+                _runtime.CrystalDawn = UnitFactory.MakeStructure(map.CrystalDawn, TeamId.Dawn, CombatBalance.CrystalHp, 0, "Crystal", false, false);
+                _runtime.CrystalDusk = UnitFactory.MakeStructure(map.CrystalDusk, TeamId.Dusk, CombatBalance.CrystalHp, 200, "Crystal", false, false);
+                var turretDawn = UnitFactory.MakeStructure(map.TurretDawn, TeamId.Dawn, CombatBalance.TurretHp, 0, "Turret", true, false);
+                var turretDusk = UnitFactory.MakeStructure(map.TurretDusk, TeamId.Dusk, CombatBalance.TurretHp, 120, "Turret", true, false);
                 _net.Register(10, turretDawn);
                 _net.Register(11, turretDusk);
                 _net.Register(12, _runtime.CrystalDawn);
@@ -78,10 +78,10 @@ namespace Ashfold
                 foreach (var camp in map.Camps)
                     UnitFactory.MakeCamp(camp);
 
-                _runtime.CrystalDawn = UnitFactory.MakeStructure(map.CrystalDawn, TeamId.Dawn, 1400f, 0, "Crystal", false);
-                _runtime.CrystalDusk = UnitFactory.MakeStructure(map.CrystalDusk, TeamId.Dusk, 1400f, 200, "Crystal", false);
-                UnitFactory.MakeStructure(map.TurretDawn, TeamId.Dawn, 1100f, 0, "Turret", true);
-                UnitFactory.MakeStructure(map.TurretDusk, TeamId.Dusk, 1100f, 120, "Turret", true);
+                _runtime.CrystalDawn = UnitFactory.MakeStructure(map.CrystalDawn, TeamId.Dawn, CombatBalance.CrystalHp, 0, "Crystal", false);
+                _runtime.CrystalDusk = UnitFactory.MakeStructure(map.CrystalDusk, TeamId.Dusk, CombatBalance.CrystalHp, 200, "Crystal", false);
+                UnitFactory.MakeStructure(map.TurretDawn, TeamId.Dawn, CombatBalance.TurretHp, 0, "Turret", true);
+                UnitFactory.MakeStructure(map.TurretDusk, TeamId.Dusk, CombatBalance.TurretHp, 120, "Turret", true);
                 _runtime.CrystalDawn.Killed += OnCrystalDown;
                 _runtime.CrystalDusk.Killed += OnCrystalDown;
             }

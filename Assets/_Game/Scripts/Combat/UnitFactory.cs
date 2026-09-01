@@ -56,35 +56,41 @@ namespace Ashfold
             }
         }
 
-        public static GameObject SpawnMinion(Transform parent, Vector3 pos, TeamId team, Vector3 laneGoal, bool localAi = true)
+        public static GameObject SpawnMinion(Transform parent, Vector3 pos, TeamId team, Vector3 laneGoal, bool localAi = true, bool captain = false)
         {
             var color = team == TeamId.Dawn ? Color.Lerp(GameTheme.Teal, Color.white, 0.25f) : Color.Lerp(GameTheme.Crimson, Color.white, 0.2f);
+            var scale = 0.7f * (captain ? CombatBalance.CaptainScale : 1f);
+            var gy = captain ? CombatBalance.CaptainGroundY : CombatBalance.MinionGroundY;
             var go = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            go.name = "Minion_" + team;
+            go.name = (captain ? "Captain_" : "Minion_") + team;
             go.transform.SetParent(parent, false);
-            go.transform.position = pos;
-            go.transform.localScale = new Vector3(0.7f, 0.7f, 0.7f);
-            go.GetComponent<Renderer>().sharedMaterial = RuntimeMat.Make(color);
+            go.transform.position = new Vector3(pos.x, gy, pos.z);
+            go.transform.localScale = new Vector3(scale, scale, scale);
+            var rend = go.GetComponent<Renderer>();
+            rend.sharedMaterial = RuntimeMat.Make(color);
 
             var unit = go.AddComponent<CombatUnit>();
             unit.Team = team;
-            unit.MaxHp = 170f;
-            unit.Hp = 170f;
-            unit.Bounty = 14;
-            unit.DisplayName = "Minion";
-            unit.GroundY = 0.7f;
+            unit.MaxHp = captain ? CombatBalance.CaptainHp : CombatBalance.MinionHp;
+            unit.Hp = unit.MaxHp;
+            unit.Bounty = captain ? CombatBalance.CaptainBounty : CombatBalance.MinionBounty;
+            unit.DisplayName = captain ? "Captain" : "Minion";
+            unit.GroundY = gy;
 
             var motor = go.AddComponent<TapMoveMotor>();
-            motor.Speed = 4.6f;
-            motor.GroundY = 0.7f;
+            motor.Speed = CombatBalance.MinionSpeed;
+            motor.GroundY = gy;
+
+            if (AttachMinionVisual(go.transform, motor, captain))
+                rend.enabled = false;
 
             if (localAi)
             {
                 var ai = go.AddComponent<MeleeAi>();
                 ai.Unit = unit;
                 ai.Motor = motor;
-                ai.Damage = 16f;
-                ai.Range = 1.7f;
+                ai.Damage = captain ? CombatBalance.CaptainDamage : CombatBalance.MinionDamage;
+                ai.Range = captain ? 1.9f : 1.7f;
                 ai.Aggro = 5.2f;
                 ai.LaneGoal = laneGoal;
             }
@@ -110,6 +116,8 @@ namespace Ashfold
                 var ai = go.AddComponent<TurretAi>();
                 ai.Unit = unit;
             }
+            if (name == "Crystal" && go.GetComponent<CrystalGemMotion>() == null)
+                go.AddComponent<CrystalGemMotion>();
             WorldHpBar.Attach(unit);
             return unit;
         }
@@ -163,6 +171,24 @@ namespace Ashfold
             motor.enabled = false;
             WorldHpBar.Attach(unit);
             return go;
+        }
+
+        static bool AttachMinionVisual(Transform root, TapMoveMotor motor, bool captain)
+        {
+            var prefab = Resources.Load<GameObject>(captain ? MapModels.CaptainVisualRes : MapModels.MinionVisualRes);
+            if (prefab == null && captain)
+                prefab = Resources.Load<GameObject>(MapModels.MinionVisualRes);
+            if (prefab == null)
+                return false;
+            var vis = Object.Instantiate(prefab, root, false);
+            vis.name = "Visual";
+            vis.transform.localPosition = new Vector3(0f, -1f, 0f);
+            vis.transform.localRotation = Quaternion.identity;
+            vis.transform.localScale = Vector3.one;
+            var anim = root.GetComponent<UnitAnim>() ?? root.gameObject.AddComponent<UnitAnim>();
+            anim.Motor = motor;
+            anim.Animator = vis.GetComponentInChildren<Animator>();
+            return true;
         }
 
         static void ApplySilhouette(Transform root, string id, Color color)

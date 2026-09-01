@@ -62,14 +62,33 @@ namespace Ashfold
             SpawnAt(target, amount, incoming);
         }
 
+        public static void TryShowGold(CombatUnit at, int amount)
+        {
+            if (at == null || amount <= 0)
+                return;
+            if (BattleRuntime.I == null || BattleRuntime.I.Player == null)
+                return;
+            var popup = Rent();
+            PlaceAt(popup, at, 0.35f);
+            popup.Begin("+" + amount, GameTheme.Gold);
+        }
+
         static void SpawnAt(CombatUnit target, float amount, bool incoming)
         {
             var popup = Rent();
-            var lift = target.IsStructure ? 2.45f : 1.9f;
+            PlaceAt(popup, target, 0f);
+            popup.Begin(Mathf.RoundToInt(amount).ToString(), incoming ? GameTheme.DamageTaken : GameTheme.DamageDealt);
+        }
+
+        static void PlaceAt(DamagePopup popup, CombatUnit target, float extraY)
+        {
+            var top = WorldHpBar.MeshTopY(target, target.GetComponentInChildren<WorldHpBar>());
+            var y = top > float.NegativeInfinity / 2f
+                ? top + 0.55f + extraY
+                : target.transform.position.y + (target.IsStructure ? 2.45f : 1.9f) + extraY;
             var n = _stagger++ % 5;
             var side = (n - 2) * 0.22f;
-            popup.transform.position = target.transform.position + new Vector3(side, lift, 0.12f * (n % 2 == 0 ? 1f : -1f));
-            popup.Begin(Mathf.RoundToInt(amount).ToString(), incoming);
+            popup.transform.position = new Vector3(target.transform.position.x + side, y, target.transform.position.z + 0.12f * (n % 2 == 0 ? 1f : -1f));
         }
 
         static DamagePopup Rent()
@@ -141,10 +160,10 @@ namespace Ashfold
             return t;
         }
 
-        void Begin(string value, bool incoming)
+        void Begin(string value, Color tint)
         {
             _age = 0f;
-            _tint = incoming ? GameTheme.DamageTaken : GameTheme.DamageDealt;
+            _tint = tint;
             _vel = new Vector3(Random.Range(-0.35f, 0.35f), 1.55f, 0f);
             transform.localScale = Vector3.one * 0.0125f * 1.18f;
             SetText(value);

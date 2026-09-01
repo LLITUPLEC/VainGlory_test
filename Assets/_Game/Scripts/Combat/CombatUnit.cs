@@ -162,7 +162,11 @@ namespace Ashfold
             if (Bounty > 0)
             {
                 if (source.IsPlayer && BattleRuntime.I != null)
+                {
                     BattleRuntime.I.AddGold(Bounty);
+                    if (!IsHero && !IsStructure && !NetBattle())
+                        DamagePopup.TryShowGold(this, Bounty);
+                }
                 else
                 {
                     var bot = source.GetComponent<HeroBotAi>();

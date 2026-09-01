@@ -312,12 +312,14 @@ namespace Ashfold
                 Register(e.id, camp);
                 return camp;
             }
-            if (e.kind != "minion")
+            if (e.kind != "minion" && e.kind != "captain")
                 return null;
             var team = MapTeam(e.team, e.kind);
-            var posM = new Vector3(e.x, 0.7f, e.z);
-            var goal = team == TeamId.Dawn ? new Vector3(40f, 0.7f, 0f) : new Vector3(-40f, 0.7f, 0f);
-            var minionGo = UnitFactory.SpawnMinion(transform, posM, team, goal, false);
+            var captain = e.kind == "captain";
+            var gy = captain ? CombatBalance.CaptainGroundY : CombatBalance.MinionGroundY;
+            var posM = new Vector3(e.x, gy, e.z);
+            var goal = CombatBalance.MinionGoal(team);
+            var minionGo = UnitFactory.SpawnMinion(transform, posM, team, goal, false, captain);
             var unit = minionGo.GetComponent<CombatUnit>();
             Register(e.id, unit);
             return unit;
@@ -340,8 +342,13 @@ namespace Ashfold
                     continue;
                 CombatUnit.MarkHeroFight(src, dst);
                 DamagePopup.TryShow(dst, src, hit.dmg);
+                if (hit.kill != 0 && src.IsPlayer && !dst.IsHero && !dst.IsStructure && dst.Bounty > 0)
+                    DamagePopup.TryShowGold(dst, dst.Bounty);
                 if (hit.skill != 0 && src.IsPlayer)
                     continue;
+                var anim = src.GetComponent<UnitAnim>();
+                if (anim != null)
+                    anim.PlayAttack();
                 var combat = src.GetComponent<HeroCombat>();
                 var ranged = src.IsStructure || (combat != null && combat.Def != null && combat.Def.Ranged);
                 if (ranged)

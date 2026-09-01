@@ -8,6 +8,7 @@ const (
 	idCrystalDawn = 12
 	idCrystalDusk = 13
 	kindMinion    = "minion"
+	kindCaptain   = "captain"
 	kindTurret    = "turret"
 	kindCrystal   = "crystal"
 	kindCamp      = "camp"
@@ -28,16 +29,22 @@ const (
 	minionHP      = 170.0
 	minionDmg     = 16.0
 	minionRange   = 1.7
-	minionSpeed   = 4.6
+	minionSpeed   = 3.68
 	minionInterval = 1.1
 	minionBounty  = 14
-	turretHP      = 1100.0
+	captainHP     = 250.0
+	captainDmg    = 22.0
+	captainBounty = 24
+	captainScale  = 1.5
+	waveSize      = 4
+	waveSpacing   = 1.45
+	turretHP      = 1540.0
 	turretDmg     = 85.0
 	turretRange   = 9.0
 	turretInterval = 1.15
-	crystalHP     = 1400.0
+	crystalHP     = 2800.0
 	waveIntervalTicks = 20 * tickRate
-	maxLiveMinions    = 24
+	maxLiveMinions    = 32
 )
 
 type ent struct {
@@ -115,7 +122,7 @@ func tickWorld(s *State) {
 func spawnWave(s *State) {
 	live := 0
 	for _, u := range s.Extras {
-		if u != nil && u.Kind == kindMinion && u.Alive {
+		if u != nil && isLaneCreep(u) && u.Alive {
 			live++
 		}
 	}
@@ -124,19 +131,37 @@ func spawnWave(s *State) {
 	}
 	for team := 0; team < 2; team++ {
 		x := -32.0
+		dir := 1.0
 		if team == 1 {
 			x = 32
+			dir = -1
 		}
-		for i := 0; i < 3; i++ {
+		for i := 0; i < waveSize; i++ {
 			id := s.NextMinionId
 			s.NextMinionId++
-			z := float64(i-1) * 1.6
+			along := float64(waveSize-1-i) * waveSpacing
+			px := x + dir*along
+			captain := i == waveSize-1
+			kind := kindMinion
+			hp := minionHP
+			dmg := minionDmg
+			bounty := minionBounty
+			gy := 0.7
+			rng := minionRange
+			if captain {
+				kind = kindCaptain
+				hp = captainHP
+				dmg = captainDmg
+				bounty = captainBounty
+				gy = 0.7 * captainScale
+				rng = 1.9
+			}
 			s.Extras[id] = &ent{
-				ID: id, Kind: kindMinion, Team: team,
-				X: x, Z: z, Yaw: yawToward(x, z, -x, z),
-				HP: minionHP, MaxHP: minionHP,
-				Damage: minionDmg, Range: minionRange, Interval: minionInterval,
-				Speed: minionSpeed, Alive: true, Bounty: minionBounty, GroundY: 0.7,
+				ID: id, Kind: kind, Team: team,
+				X: px, Z: 0, Yaw: yawToward(px, 0, -x, 0),
+				HP: hp, MaxHP: hp,
+				Damage: dmg, Range: rng, Interval: minionInterval,
+				Speed: minionSpeed, Alive: true, Bounty: bounty, GroundY: gy,
 			}
 		}
 	}
@@ -162,7 +187,7 @@ func stepExtra(s *State, u *ent) {
 	switch u.Kind {
 	case kindTurret:
 		stepTurret(s, u)
-	case kindMinion:
+	case kindMinion, kindCaptain:
 		stepMinion(s, u)
 	}
 }
@@ -382,7 +407,7 @@ func hurtHit(s *State, srcID, srcTeam int, srcHero bool, dmg float64, dstID int,
 
 func pruneMinions(s *State) {
 	for id, u := range s.Extras {
-		if u != nil && u.Kind == kindMinion && !u.Alive {
+		if u != nil && isLaneCreep(u) && !u.Alive {
 			delete(s.Extras, id)
 		}
 	}
@@ -398,7 +423,7 @@ func extraSnapshot(s *State, ents []snapEntity) []snapEntity {
 		ents = append(ents, snapFromEnt(u))
 	}
 	for id, u := range s.Extras {
-		if u == nil || u.Kind != kindMinion || !u.Alive {
+		if u == nil || !isLaneCreep(u) || !u.Alive {
 			continue
 		}
 		if id < 100 {
@@ -416,4 +441,8 @@ func snapFromEnt(u *ent) snapEntity {
 		HP: u.HP, MaxHP: u.MaxHP,
 		Alive: u.Alive, TargetId: u.AttackTarget,
 	}
+}
+
+func isLaneCreep(u *ent) bool {
+	return u != nil && (u.Kind == kindMinion || u.Kind == kindCaptain)
 }

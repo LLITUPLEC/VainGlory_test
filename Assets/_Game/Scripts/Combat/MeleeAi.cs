@@ -64,6 +64,9 @@ namespace Ashfold
                 if (_cd > 0f)
                     return;
                 _cd = Interval;
+                var anim = GetComponent<UnitAnim>();
+                if (anim != null)
+                    anim.PlayAttack();
                 _target.ApplyDamage(Damage, Unit);
                 return;
             }

@@ -490,13 +490,21 @@ namespace Ashfold.Editor
             Marker(parent, "DawnSpawn", new Vector3(-FoldMapBuilder.HalfLength, 1.35f, 0f));
             Marker(parent, "DuskSpawn", new Vector3(FoldMapBuilder.HalfLength, 1.35f, 0f));
 
-            Prim(parent, PrimitiveType.Cylinder, new Vector3(-16f, 1.6f, 0f), new Vector3(1.6f, 1.6f, 1.6f), _teal, "TurretDawn", true);
-            Prim(parent, PrimitiveType.Cylinder, new Vector3(16f, 1.6f, 0f), new Vector3(1.6f, 1.6f, 1.6f), _crimson, "TurretDusk", true);
+            if (MapModelSetup.PlaceTurret(parent, new Vector3(-16f, 0f, 0f), true, "TurretDawn") == null)
+                Prim(parent, PrimitiveType.Cylinder, new Vector3(-16f, 1.6f, 0f), new Vector3(1.6f, 1.6f, 1.6f), _teal, "TurretDawn", true);
+            if (MapModelSetup.PlaceTurret(parent, new Vector3(16f, 0f, 0f), false, "TurretDusk") == null)
+                Prim(parent, PrimitiveType.Cylinder, new Vector3(16f, 1.6f, 0f), new Vector3(1.6f, 1.6f, 1.6f), _crimson, "TurretDusk", true);
 
-            var cd = Prim(parent, PrimitiveType.Cube, new Vector3(-FoldMapBuilder.HalfLength - 3.5f, 2.2f, 0f), new Vector3(1.4f, 4.2f, 1.4f), _teal, "CrystalDawn", true);
-            cd.transform.rotation = Quaternion.Euler(0f, 45f, 0f);
-            var ck = Prim(parent, PrimitiveType.Cube, new Vector3(FoldMapBuilder.HalfLength + 3.5f, 2.2f, 0f), new Vector3(1.4f, 4.2f, 1.4f), _crimson, "CrystalDusk", true);
-            ck.transform.rotation = Quaternion.Euler(0f, 45f, 0f);
+            if (MapModelSetup.PlaceCrystal(parent, new Vector3(-FoldMapBuilder.HalfLength - 3.5f, 0f, 0f), true, "CrystalDawn") == null)
+            {
+                var cd = Prim(parent, PrimitiveType.Cube, new Vector3(-FoldMapBuilder.HalfLength - 3.5f, 2.2f, 0f), new Vector3(1.4f, 4.2f, 1.4f), _teal, "CrystalDawn", true);
+                cd.transform.rotation = Quaternion.Euler(0f, 45f, 0f);
+            }
+            if (MapModelSetup.PlaceCrystal(parent, new Vector3(FoldMapBuilder.HalfLength + 3.5f, 0f, 0f), false, "CrystalDusk") == null)
+            {
+                var ck = Prim(parent, PrimitiveType.Cube, new Vector3(FoldMapBuilder.HalfLength + 3.5f, 2.2f, 0f), new Vector3(1.4f, 4.2f, 1.4f), _crimson, "CrystalDusk", true);
+                ck.transform.rotation = Quaternion.Euler(0f, 45f, 0f);
+            }
 
             Prim(parent, PrimitiveType.Sphere, new Vector3(-12f, 0.55f, 13f), Vector3.one * 1.5f, _camp, "CampNL", true);
             Prim(parent, PrimitiveType.Sphere, new Vector3(12f, 0.55f, 13f), Vector3.one * 1.5f, _camp, "CampNR", true);

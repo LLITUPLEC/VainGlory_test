@@ -62,10 +62,10 @@ namespace Ashfold
                         UnitFactory.MakeCamp(camp);
                 }
             }
-            UnitFactory.MakeStructure(_map.CrystalDawn, TeamId.Dawn, 1400f, 0, "Crystal", false, false);
-            UnitFactory.MakeStructure(_map.CrystalDusk, TeamId.Dusk, 1400f, 200, "Crystal", false, false);
-            UnitFactory.MakeStructure(_map.TurretDawn, TeamId.Dawn, 1100f, 0, "Turret", true, false);
-            UnitFactory.MakeStructure(_map.TurretDusk, TeamId.Dusk, 1100f, 120, "Turret", true, false);
+            UnitFactory.MakeStructure(_map.CrystalDawn, TeamId.Dawn, CombatBalance.CrystalHp, 0, "Crystal", false, false);
+            UnitFactory.MakeStructure(_map.CrystalDusk, TeamId.Dusk, CombatBalance.CrystalHp, 200, "Crystal", false, false);
+            UnitFactory.MakeStructure(_map.TurretDawn, TeamId.Dawn, CombatBalance.TurretHp, 0, "Turret", true, false);
+            UnitFactory.MakeStructure(_map.TurretDusk, TeamId.Dusk, CombatBalance.TurretHp, 120, "Turret", true, false);
             SilenceMapAi();
 
             _dummyHome = _map.DawnSpawn + new Vector3(10f, 0f, 0f);
