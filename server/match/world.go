@@ -39,10 +39,13 @@ const (
 	waveSize      = 4
 	waveSpacing   = 1.45
 	turretHP      = 1540.0
-	turretDmg     = 85.0
+	turretDmg     = 119.0
 	turretRange   = 9.0
 	turretInterval = 1.15
 	crystalHP     = 2800.0
+	turretSolidR  = 2.2
+	crystalSolidR = 2.8
+	moverSolidR   = 0.4
 	waveIntervalTicks = 20 * tickRate
 	maxLiveMinions    = 32
 )
@@ -221,7 +224,7 @@ func stepMinion(s *State, u *ent) {
 		d := dist(u.X, u.Z, x, z)
 		u.Yaw = yawToward(u.X, u.Z, x, z)
 		if d > u.Range {
-			moveEnt(u, x, z)
+			moveEnt(s, u, x, z)
 			return
 		}
 		if u.AttackCd > 0 {
@@ -232,7 +235,7 @@ func stepMinion(s *State, u *ent) {
 		return
 	}
 	goal := fountainX(1 - u.Team)
-	moveEnt(u, goal, 0)
+	moveEnt(s, u, goal, 0)
 }
 
 func stepCamp(s *State, u *ent) {
@@ -249,7 +252,7 @@ func stepCamp(s *State, u *ent) {
 	}
 	if dist(u.X, u.Z, u.HomeX, u.HomeZ) > campLeash {
 		u.AttackTarget = 0
-		moveEnt(u, u.HomeX, u.HomeZ)
+		moveEnt(s, u, u.HomeX, u.HomeZ)
 		return
 	}
 	tid := nearestHostile(s, u.X, u.Z, u.Team, campAggro, false)
@@ -262,7 +265,7 @@ func stepCamp(s *State, u *ent) {
 		d := dist(u.X, u.Z, x, z)
 		u.Yaw = yawToward(u.X, u.Z, x, z)
 		if d > u.Range {
-			moveEnt(u, x, z)
+			moveEnt(s, u, x, z)
 			return
 		}
 		if u.AttackCd > 0 {
@@ -273,28 +276,63 @@ func stepCamp(s *State, u *ent) {
 		return
 	}
 	if dist(u.X, u.Z, u.HomeX, u.HomeZ) > arriveEps {
-		moveEnt(u, u.HomeX, u.HomeZ)
+		moveEnt(s, u, u.HomeX, u.HomeZ)
 	}
 }
 
-func moveEnt(u *ent, x, z float64) {
+func moveEnt(s *State, u *ent, x, z float64) {
 	dx := x - u.X
 	dz := z - u.Z
 	d := math.Hypot(dx, dz)
 	if d <= arriveEps {
-		u.X = clamp(x, -halfLength-mapPad, halfLength+mapPad)
-		u.Z = clamp(z, -halfWidth, halfWidth)
+		u.X, u.Z = clampSolid(s, x, z)
 		return
 	}
 	step := u.Speed * dt
 	if step >= d {
-		u.X = clamp(x, -halfLength-mapPad, halfLength+mapPad)
-		u.Z = clamp(z, -halfWidth, halfWidth)
+		u.X, u.Z = clampSolid(s, x, z)
 	} else {
-		u.X = clamp(u.X+dx/d*step, -halfLength-mapPad, halfLength+mapPad)
-		u.Z = clamp(u.Z+dz/d*step, -halfWidth, halfWidth)
+		u.X, u.Z = clampSolid(s, u.X+dx/d*step, u.Z+dz/d*step)
 	}
 	u.Yaw = yawToward(u.X-dx, u.Z-dz, x, z)
+}
+
+func clampSolid(s *State, x, z float64) (float64, float64) {
+	x, z = resolveSolid(s, x, z)
+	return clamp(x, -halfLength-mapPad, halfLength+mapPad), clamp(z, -halfWidth, halfWidth)
+}
+
+func resolveSolid(s *State, x, z float64) (float64, float64) {
+	if s == nil {
+		return x, z
+	}
+	for _, u := range s.Extras {
+		if u == nil || !u.Alive {
+			continue
+		}
+		var body float64
+		switch u.Kind {
+		case kindTurret:
+			body = turretSolidR
+		case kindCrystal:
+			body = crystalSolidR
+		default:
+			continue
+		}
+		need := body + moverSolidR
+		dx := x - u.X
+		dz := z - u.Z
+		d := math.Hypot(dx, dz)
+		if d >= need {
+			continue
+		}
+		if d < 0.001 {
+			dx, dz, d = 1, 0, 1
+		}
+		x = u.X + dx/d*need
+		z = u.Z + dz/d*need
+	}
+	return x, z
 }
 
 func nearestHostile(s *State, x, z float64, team int, rng float64, preferHero bool) int {

@@ -304,8 +304,8 @@ namespace Ashfold
             Add("results.stage", "STAGE 4  ·  RESULTS", "ЭТАП 4  ·  РЕЗУЛЬТАТЫ");
 
             Add("hud.items_empty", "ITEMS —", "ПРЕДМЕТЫ —");
-            Add("hud.hint", "LMB attack  ·  Q/W/E skills  ·  Shift+Q/W/E upgrade  ·  B shop  ·  R recall", "ЛКМ атака  ·  Q/W/E умения  ·  Shift+Q/W/E прокачка  ·  B магазин  ·  R возврат");
-            Add("hud.hint_net", "LMB move / attack  ·  minimap ping  ·  Alt+LMB  ·  10 Hz", "ЛКМ ход / атака  ·  пинг на миникарте  ·  Alt+ЛКМ  ·  10 Гц");
+            Add("hud.hint", "LMB move / attack  ·  Q/W/E or A/B/C skills  ·  Shift+skill upgrade  ·  B shop  ·  R recall", "ЛКМ ход / атака  ·  Q/W/E или A/B/C умения  ·  Shift+умение прокачка  ·  B магазин  ·  R возврат");
+            Add("hud.hint_net", "LMB move / attack  ·  Q/W/E or A/B/C skills  ·  minimap ping  ·  Alt+LMB  ·  10 Hz", "ЛКМ ход / атака  ·  Q/W/E или A/B/C умения  ·  пинг на миникарте  ·  Alt+ЛКМ  ·  10 Гц");
             Add("hud.reconnecting", "RECONNECTING  {0}s", "ПЕРЕПОДКЛЮЧЕНИЕ  {0} с");
             Add("hud.rejoin_fail", "Reconnect failed", "Не удалось переподключиться");
             Add("hud.shop", "SHOP", "МАГАЗИН");
@@ -319,7 +319,7 @@ namespace Ashfold
             Add("hud.level", "LV {0}", "УР {0}");
             Add("hud.skill_pts", "+{0}", "+{0}");
             Add("hud.locked", "LOCKED", "ЗАКРЫТО");
-            Add("hud.aim_ground", "Tap the map to place the ability  ·  Q/W/E again to cancel", "Нажми на карту, куда падёт умение  ·  Q/W/E ещё раз — отмена");
+            Add("hud.aim_ground", "Click the map to place the ability  ·  right-click / Esc / same key to cancel", "Нажми на карту, куда падёт умение  ·  ПКМ / Esc / та же клавиша — отмена");
             Add("hud.ult_locked", "ULT  ·  LV {0}", "УЛЬТА  ·  УР {0}");
             Add("hud.fight", "FIGHT", "В БОЙ");
 

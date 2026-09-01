@@ -564,7 +564,7 @@ func stepHero(s *State, h *hero) {
 			d := dist(h.X, h.Z, x, z)
 			h.Yaw = yawToward(h.X, h.Z, x, z)
 			if d > h.Range {
-				moveToward(h, x, z)
+				moveToward(s, h, x, z)
 			} else {
 				h.HasMove = false
 				if h.AttackCd <= 0 {
@@ -577,7 +577,7 @@ func stepHero(s *State, h *hero) {
 	}
 
 	if h.HasMove {
-		moveToward(h, h.DestX, h.DestZ)
+		moveToward(s, h, h.DestX, h.DestZ)
 	}
 }
 
@@ -586,24 +586,21 @@ func respawnSeconds(s *State) float64 {
 	return 5.0 + 2.0*minutes
 }
 
-func moveToward(h *hero, x, z float64) {
+func moveToward(s *State, h *hero, x, z float64) {
 	dx := x - h.X
 	dz := z - h.Z
 	d := math.Hypot(dx, dz)
 	if d <= arriveEps {
-		h.X = clamp(x, -halfLength-mapPad, halfLength+mapPad)
-		h.Z = clamp(z, -halfWidth, halfWidth)
+		h.X, h.Z = clampSolid(s, x, z)
 		h.HasMove = false
 		return
 	}
 	step := h.Speed * dt
 	if step >= d {
-		h.X = clamp(x, -halfLength-mapPad, halfLength+mapPad)
-		h.Z = clamp(z, -halfWidth, halfWidth)
+		h.X, h.Z = clampSolid(s, x, z)
 		h.HasMove = false
 	} else {
-		h.X = clamp(h.X+dx/d*step, -halfLength-mapPad, halfLength+mapPad)
-		h.Z = clamp(h.Z+dz/d*step, -halfWidth, halfWidth)
+		h.X, h.Z = clampSolid(s, h.X+dx/d*step, h.Z+dz/d*step)
 	}
 	h.Yaw = yawToward(h.X-dx, h.Z-dz, x, z)
 }

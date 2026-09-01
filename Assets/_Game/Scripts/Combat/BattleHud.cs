@@ -77,6 +77,8 @@ namespace Ashfold
 
         void Build(Transform root)
         {
+            WorldClickCatcher.Attach(root, Combat != null ? Combat.GetComponent<PlayerCommander>() : null);
+
             var top = UiFactory.Box(root, new Vector2(0.02f, 0.82f), new Vector2(0.30f, 0.98f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Hero");
             _hp = UiFactory.Label(top.transform, "", 16, GameTheme.Text, TextAnchor.MiddleLeft, FontStyle.Normal, true);
             UiFactory.Stretch(_hp.rectTransform, 12, 4);

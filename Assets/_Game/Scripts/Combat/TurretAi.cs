@@ -5,9 +5,9 @@ namespace Ashfold
     public sealed class TurretAi : MonoBehaviour
     {
         public CombatUnit Unit;
-        public float Damage = 85f;
-        public float Range = 9f;
-        public float Interval = 1.15f;
+        public float Damage = CombatBalance.TurretDamage;
+        public float Range = CombatBalance.TurretRange;
+        public float Interval = CombatBalance.TurretInterval;
         float _cd;
         CombatUnit _target;
 

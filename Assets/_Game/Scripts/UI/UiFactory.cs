@@ -64,6 +64,7 @@ namespace Ashfold
             rt.offsetMax = offsetMax;
             var img = go.GetComponent<Image>();
             img.color = color;
+            img.raycastTarget = false;
             return img;
         }
 

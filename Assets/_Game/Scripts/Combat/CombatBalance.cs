@@ -20,6 +20,9 @@ namespace Ashfold
         public const float WaveSpawnX = 32f;
 
         public const float TurretHp = 1540f;
+        public const float TurretDamage = 119f;
+        public const float TurretRange = 9f;
+        public const float TurretInterval = 1.15f;
         public const float CrystalHp = 2800f;
 
         public static UnityEngine.Vector3 MinionSpawn(TeamId team, int index)

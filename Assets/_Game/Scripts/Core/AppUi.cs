@@ -7,12 +7,6 @@ namespace Ashfold
 {
     public static class AppUi
     {
-        static readonly string[] LeftoverCanvasNames =
-        {
-            "ShopBattle", "TutorialBattle", "TutorialHall", "ModeOverlay", "DraftOverlay",
-            "LoadingOverlay", "QueueOverlay", "PartyHint", "AimMark", "DamagePopups"
-        };
-
         public static void EnsureEventSystem()
         {
             var found = Object.FindObjectsByType<EventSystem>(FindObjectsInactive.Include, FindObjectsSortMode.None);
@@ -33,6 +27,8 @@ namespace Ashfold
                 keep = go.AddComponent<EventSystem>();
                 go.AddComponent<InputSystemUIInputModule>();
             }
+            else if (keep.GetComponent<InputSystemUIInputModule>() == null)
+                keep.gameObject.AddComponent<InputSystemUIInputModule>();
 
             keep.SetSelectedGameObject(null);
         }
@@ -42,11 +38,27 @@ namespace Ashfold
             EnsureEventSystem();
             DamagePopup.ClearWorld();
             CombatUnit.PurgeDead();
-            foreach (var name in LeftoverCanvasNames)
+
+            var canvases = Object.FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (var i = 0; i < canvases.Length; i++)
             {
-                var go = GameObject.Find(name);
-                if (go != null)
-                    Object.Destroy(go);
+                var canvas = canvases[i];
+                if (canvas == null)
+                    continue;
+                if (GameSession.I != null && canvas.transform.IsChildOf(GameSession.I.transform))
+                    continue;
+                Object.Destroy(canvas.gameObject);
+            }
+
+            var transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (var i = 0; i < transforms.Length; i++)
+            {
+                var t = transforms[i];
+                if (t == null)
+                    continue;
+                var n = t.name;
+                if (n == "AimMark" || n == "MapPing" || n.StartsWith("RangeRing_"))
+                    Object.Destroy(t.gameObject);
             }
         }
 
@@ -61,13 +73,11 @@ namespace Ashfold
         {
             if (go == null)
                 return;
-            var canvas = go.GetComponent<Canvas>();
-            if (canvas != null)
-            {
-                var gr = go.GetComponent<GraphicRaycaster>();
-                if (gr != null)
-                    Object.Destroy(gr);
-            }
+            var gr = go.GetComponent<GraphicRaycaster>();
+            if (gr == null)
+                return;
+            gr.enabled = false;
+            Object.Destroy(gr);
         }
     }
 }

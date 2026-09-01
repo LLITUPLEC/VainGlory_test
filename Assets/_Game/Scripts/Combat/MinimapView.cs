@@ -25,6 +25,7 @@ namespace Ashfold
         {
             var frame = UiFactory.Box(hudRoot, new Vector2(0.02f, 0.55f), new Vector2(0.18f, 0.86f), Vector2.zero, Vector2.zero, GameTheme.BgPanel, "Minimap");
             var map = UiFactory.Box(frame.transform, new Vector2(0.08f, 0.08f), new Vector2(0.92f, 0.92f), Vector2.zero, Vector2.zero, GameTheme.Hex(0x1A2A28), "Map");
+            map.raycastTarget = true;
             var lane = UiFactory.Box(map.transform, new Vector2(0.05f, 0.42f), new Vector2(0.95f, 0.58f), Vector2.zero, Vector2.zero, GameTheme.Hex(0x3A4A3C, 0.7f), "Lane");
             lane.raycastTarget = false;
 

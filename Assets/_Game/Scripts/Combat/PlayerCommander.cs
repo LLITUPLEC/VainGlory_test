@@ -1,7 +1,5 @@
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
-using UnityEngine.UI;
 
 namespace Ashfold
 {
@@ -11,47 +9,59 @@ namespace Ashfold
         public CombatUnit Unit;
         int _aimSlot = -1;
         GameObject _aimMark;
+        float _aimOpenedAt = -10f;
 
         void Update()
         {
             if (Hero == null || Unit == null || !Unit.IsAlive)
+            {
+                StopAim();
                 return;
+            }
             Hero.EnsureControlIfAlive();
             if (BattleRuntime.I != null && BattleRuntime.I.InPrep)
                 return;
-            if (PressedKey(UnityEngine.InputSystem.Key.Escape) || RightClicked())
+            if (PressedKey(Key.Escape) || RightClicked())
                 StopAim();
-            if (PressedKey(UnityEngine.InputSystem.Key.Q))
+            if (PressedKey(Key.Q) || PressedKey(Key.A))
                 PressSkill(0);
-            if (PressedKey(UnityEngine.InputSystem.Key.W))
+            if (PressedKey(Key.W) || PressedKey(Key.S))
                 PressSkill(1);
-            if (PressedKey(UnityEngine.InputSystem.Key.E))
+            if (PressedKey(Key.E) || PressedKey(Key.C))
                 PressSkill(2);
-            if (PressedKey(UnityEngine.InputSystem.Key.B))
+            if (PressedKey(Key.B))
+            {
+                StopAim();
                 FountainShop.Open(Hero);
-            if (PressedKey(UnityEngine.InputSystem.Key.R))
+            }
+            if (PressedKey(Key.R))
+            {
+                StopAim();
                 Hero.TryRecall();
-            if (!Pressed())
-                return;
-            if (OverBlockingUi(_aimSlot >= 0))
-                return;
+            }
+        }
 
+        public void OnWorldPointer(Vector2 screen)
+        {
+            if (Hero == null || Unit == null || !Unit.IsAlive)
+                return;
+            if (BattleRuntime.I != null && BattleRuntime.I.InPrep)
+                return;
             var cam = Camera.main;
             if (cam == null)
                 return;
-            var screen = PointerScreen();
             var ray = cam.ScreenPointToRay(screen);
             if (PingHeld() && PlanePoint(ray, out var pingAt))
             {
                 MapPingFx.TrySend(pingAt);
                 return;
             }
-            if (_aimSlot >= 0 && PlanePoint(ray, out var aimAt))
+            if (_aimSlot >= 0)
             {
-                var cast = Hero.TryCastSkill(_aimSlot, Hero.AttackTarget, aimAt);
+                if (PlanePoint(ray, out var aimAt))
+                    Hero.TryCastSkill(_aimSlot, Hero.AttackTarget, aimAt);
                 StopAim();
-                if (cast)
-                    return;
+                return;
             }
             var unit = PickUnit(ray);
             if (unit == null && PlanePoint(ray, out var ground))
@@ -91,6 +101,7 @@ namespace Ashfold
             var p = Hero.Progress;
             if (Shift() || (p != null && p.RankOf(slot) < 1 && p.CanUpgrade(slot)))
             {
+                StopAim();
                 Hero.TryUpgrade(slot);
                 return;
             }
@@ -106,6 +117,8 @@ namespace Ashfold
                 return;
             if (_aimSlot == slot)
             {
+                if (Time.unscaledTime - _aimOpenedAt < 0.2f)
+                    return;
                 StopAim();
                 return;
             }
@@ -116,6 +129,7 @@ namespace Ashfold
                 if (!Hero.SlotReady(slot))
                     return;
                 _aimSlot = slot;
+                _aimOpenedAt = Time.unscaledTime;
                 EnsureMark();
                 return;
             }
@@ -124,9 +138,21 @@ namespace Ashfold
 
         void StopAim()
         {
+            ClearAim(false);
+        }
+
+        void ClearAim(bool destroyMark)
+        {
             _aimSlot = -1;
-            if (_aimMark != null)
-                _aimMark.SetActive(false);
+            if (_aimMark == null)
+                return;
+            if (destroyMark)
+            {
+                Destroy(_aimMark);
+                _aimMark = null;
+                return;
+            }
+            _aimMark.SetActive(false);
         }
 
         void LateUpdate()
@@ -163,10 +189,14 @@ namespace Ashfold
             _aimMark.GetComponent<Renderer>().sharedMaterial = RuntimeMat.Make(new Color(GameTheme.Gold.r, GameTheme.Gold.g, GameTheme.Gold.b, 0.35f));
         }
 
+        void OnDisable()
+        {
+            ClearAim(true);
+        }
+
         void OnDestroy()
         {
-            if (_aimMark != null)
-                Destroy(_aimMark);
+            ClearAim(true);
         }
 
         static bool Shift()
@@ -194,13 +224,6 @@ namespace Ashfold
             return Keyboard.current != null && Keyboard.current[key].wasPressedThisFrame;
         }
 
-        static bool Pressed()
-        {
-            if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
-                return true;
-            return Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame;
-        }
-
         static Vector2 PointerScreen()
         {
             if (Mouse.current != null && (Mouse.current.leftButton.isPressed || Mouse.current.leftButton.wasPressedThisFrame || Mouse.current.rightButton.isPressed))
@@ -212,35 +235,6 @@ namespace Ashfold
             if (Touchscreen.current != null)
                 return Touchscreen.current.primaryTouch.position.ReadValue();
             return Vector2.zero;
-        }
-
-        static readonly System.Collections.Generic.List<RaycastResult> UiHits = new System.Collections.Generic.List<RaycastResult>(8);
-
-        static bool OverBlockingUi(bool aiming)
-        {
-            var es = EventSystem.current;
-            if (es == null)
-                return false;
-            var ped = new PointerEventData(es) { position = PointerScreen() };
-            UiHits.Clear();
-            es.RaycastAll(ped, UiHits);
-            for (var i = 0; i < UiHits.Count; i++)
-            {
-                var go = UiHits[i].gameObject;
-                if (go == null)
-                    continue;
-                var canvas = go.GetComponentInParent<Canvas>();
-                if (canvas != null && canvas.renderMode == RenderMode.WorldSpace)
-                    continue;
-                if (go.GetComponentInParent<WorldHpBar>() != null)
-                    continue;
-                if (go.GetComponentInParent<DamagePopup>() != null)
-                    continue;
-                if (aiming && go.GetComponentInParent<Button>() == null)
-                    continue;
-                return true;
-            }
-            return false;
         }
 
         static bool PlanePoint(Ray ray, out Vector3 point)
