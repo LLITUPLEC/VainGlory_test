@@ -7,16 +7,24 @@ import (
 
 const (
 	groundY         = 1.35
-	halfLength      = 38.0
-	halfWidth       = 22.0
+	halfLength      = 130.0
+	halfWidth       = 45.0
 	mapPad          = 2.0
-	fountainRadius  = 7.4
+	fountainRadius  = 14.0
 	heroBounty      = 120
 	dt              = 1.0 / tickRate
 	botThinkMod     = 2
 	retreatHp       = 0.32
 	recoverHp       = 0.85
 	arriveEps       = 0.2
+	dawnSpawnX      = -69.525
+	dawnSpawnZ      = 13.710
+	duskSpawnX      = 98.680
+	duskSpawnZ      = 13.461
+	crystalDawnX    = -77.244
+	crystalDawnZ    = -13.344
+	crystalDuskX    = 103.200
+	crystalDuskZ    = -10.872
 )
 
 var botNames = []string{"Rook", "Needle", "Grove", "Ember", "Cinder", "Shade"}
@@ -65,6 +73,7 @@ type hero struct {
 	Items        []string
 	Resist       float64
 	HealPower    float64
+	LaneI        int
 }
 
 type hitEvent struct {
@@ -144,11 +153,18 @@ func netID(team, slot int) int {
 	return team*3 + slot + 1
 }
 
-func fountainX(team int) float64 {
+func fountainXZ(team int) (float64, float64) {
 	if team == 1 {
-		return halfLength
+		return duskSpawnX, duskSpawnZ
 	}
-	return -halfLength
+	return dawnSpawnX, dawnSpawnZ
+}
+
+func crystalXZ(team int) (float64, float64) {
+	if team == 1 {
+		return crystalDuskX, crystalDuskZ
+	}
+	return crystalDawnX, crystalDawnZ
 }
 
 func spawnHeroes(s *State) {
@@ -159,8 +175,9 @@ func spawnHeroes(s *State) {
 		}
 		def := resolveHero(r.HeroId)
 		id := netID(r.Team, r.Slot)
-		x := fountainX(r.Team)
-		z := float64(r.Slot-1) * 2.0
+		x, z := fountainXZ(r.Team)
+		x += float64(r.Slot-1) * 2.0
+		ex, ez := fountainXZ(1 - r.Team)
 		s.Heroes[id] = &hero{
 			ID:     id,
 			UserId: r.UserId,
@@ -170,7 +187,7 @@ func spawnHeroes(s *State) {
 			HeroId: resolveHeroId(r.HeroId),
 			X:      x,
 			Z:      z,
-			Yaw:    yawToward(x, z, -x, z),
+			Yaw:    yawToward(x, z, ex, ez),
 			HP:     def.MaxHP,
 			MaxHP:  def.MaxHP,
 			Damage: def.Damage,
@@ -482,12 +499,21 @@ func thinkBots(s *State) {
 		}
 		if ratio < retreatHp && !inFountain(h) {
 			h.AttackTarget = 0
-			setDest(h, fountainX(h.Team), 0)
+			fx, fz := fountainXZ(h.Team)
+			if dist(h.X, h.Z, fx, fz) > 14 {
+				h.X, h.Z = fx, fz
+				h.HasMove = false
+			} else {
+				setDest(h, fx, fz)
+			}
 			continue
 		}
 		enemy := nearestHostile(s, h.X, h.Z, h.Team, 80, false)
 		if enemy == 0 {
-			setDest(h, -fountainX(h.Team), 0)
+			tmp := &ent{Team: h.Team, X: h.X, Z: h.Z, LaneI: h.LaneI}
+			gx, gz := nextLaneFrom(tmp)
+			h.LaneI = tmp.LaneI
+			setDest(h, gx, gz)
 			h.AttackTarget = 0
 			continue
 		}
@@ -505,13 +531,14 @@ func stepHero(s *State, h *hero) {
 		if h.RespawnLeft <= 0 {
 			h.Alive = true
 			h.HP = h.MaxHP
-			h.X = fountainX(h.Team)
-			h.Z = float64(h.Slot-1) * 2.0
+			h.X, h.Z = fountainXZ(h.Team)
+			h.X += float64(h.Slot-1) * 2.0
 			h.AttackTarget = 0
 			h.HasMove = false
 			h.AttackCd = 0
 			h.SkillCd = 0
 			h.StunLeft = 0
+			h.LaneI = -1
 			cancelRecall(h)
 		}
 		return
@@ -549,8 +576,8 @@ func stepHero(s *State, h *hero) {
 		h.RecallLeft -= dt
 		if h.RecallLeft <= 0 {
 			cancelRecall(h)
-			h.X = fountainX(h.Team)
-			h.Z = float64(h.Slot-1) * 2.0
+			h.X, h.Z = fountainXZ(h.Team)
+			h.X += float64(h.Slot-1) * 2.0
 			h.HP = math.Min(h.MaxHP, h.HP+h.MaxHP*0.15)
 		}
 		return
@@ -563,8 +590,9 @@ func stepHero(s *State, h *hero) {
 		} else {
 			d := dist(h.X, h.Z, x, z)
 			h.Yaw = yawToward(h.X, h.Z, x, z)
-			if d > h.Range {
-				moveToward(s, h, x, z)
+			if d > engageDist(s, h.Range, h.AttackTarget) {
+				ax, az := approachXZ(h.X, h.Z, x, z, bodyROf(s, h.AttackTarget)+h.Range*0.85)
+				moveToward(s, h, ax, az)
 			} else {
 				h.HasMove = false
 				if h.AttackCd <= 0 {
@@ -606,7 +634,8 @@ func moveToward(s *State, h *hero, x, z float64) {
 }
 
 func inFountain(h *hero) bool {
-	return dist(h.X, h.Z, fountainX(h.Team), 0) <= fountainRadius
+	fx, fz := fountainXZ(h.Team)
+	return dist(h.X, h.Z, fx, fz) <= fountainRadius
 }
 
 func checkEnd(s *State) {

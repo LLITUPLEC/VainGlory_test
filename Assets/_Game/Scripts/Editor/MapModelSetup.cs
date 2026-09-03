@@ -31,11 +31,14 @@ namespace Ashfold.Editor
         const string KristallFbx = ModelsRoot + "/kristall_1/kristall_1.fbx";
         const string KripFbx = ModelsRoot + "/krip_1/krip_1.fbx";
         const string Krip2Fbx = ModelsRoot + "/krip_2/krip_2.fbx";
+        const string BossFbx = ModelsRoot + "/Boss_p/Boss_p.fbx";
+        const string BossPrefab = UnitsDir + "/BossVisual.prefab";
 
         const float TurretHeight = 3.2f;
         const float CitadelHeight = 2.35f;
         const float CrystalHeight = 3.2f;
         const float MinionLocalHeight = 2f;
+        const float BossLocalHeight = 3.4f;
 
         [MenuItem("Ashfold/Setup Map Models")]
         public static void SetupFromMenu()
@@ -73,6 +76,14 @@ namespace Ashfold.Editor
             var captainCtrl = BuildCreepController(Krip2Fbx, CaptainControllerPath);
             var minion = BuildCreepPrefab(KripFbx, kripMat, controller, MinionPrefab, "Krip");
             var captain = BuildCreepPrefab(Krip2Fbx, krip2Mat, captainCtrl, CaptainPrefab, "Krip");
+            Material bossMat = null;
+            GameObject boss = null;
+            if (File.Exists(Abs(BossFbx)))
+            {
+                bossMat = MakeTextured("mat_boss_p", ModelsRoot + "/Boss_p/Boss_p.png", 0.38f, 0.12f, null);
+                var bossCtrl = BuildBossController(BossFbx, AnimDir + "/Boss.controller");
+                boss = BuildCreepPrefab(BossFbx, bossMat, bossCtrl, BossPrefab, "Boss_p", BossLocalHeight);
+            }
             if (!FoldMapHasArt())
             {
                 var turelMat = MakeTextured("mat_turel_1", ModelsRoot + "/turel_1/turel_1.png", 0.42f, 0.35f, null);
@@ -85,10 +96,11 @@ namespace Ashfold.Editor
 
             var mBounds = Describe(minion);
             var capBounds = Describe(captain);
+            var bossLine = boss != null ? "\nГвоздожуй: " + Describe(boss) : "";
             return "Модели настроены.\n\n" +
                    "Крип: " + mBounds + "\n" +
-                   "Капитан: " + capBounds + "\n\n" +
-                   "Префабы:\n" + MinionPrefab + "\n" + CaptainPrefab;
+                   "Капитан: " + capBounds + bossLine + "\n\n" +
+                   "Префабы:\n" + MinionPrefab + "\n" + CaptainPrefab + (boss != null ? "\n" + BossPrefab : "");
         }
 
         static Quaternion Yaw(bool dawn) => Quaternion.Euler(0f, dawn ? 90f : -90f, 0f);
@@ -127,6 +139,8 @@ namespace Ashfold.Editor
             ConfigureKrip(KripFbx);
             if (File.Exists(Abs(Krip2Fbx)))
                 ConfigureKrip(Krip2Fbx);
+            if (File.Exists(Abs(BossFbx)))
+                ConfigureKrip(BossFbx);
         }
 
         static void ConfigureStatic(string path)
@@ -255,6 +269,91 @@ namespace Ashfold.Editor
             return ac;
         }
 
+        static AnimatorController BuildBossController(string fbx, string path)
+        {
+            var clips = LoadClips(fbx);
+            var idle = FindClip(clips, "idle_11", "idle");
+            var run = FindClip(clips, "run", "running", "walk");
+            var attack = FindClip(clips, "boxing", "kick", "attack");
+            var flourish = FindClip(clips, "mage_soell", "soell", "spell");
+            if (run == null && clips.Length > 0)
+                run = clips[0];
+
+            if (File.Exists(Abs(path)))
+                AssetDatabase.DeleteAsset(path);
+
+            var ac = AnimatorController.CreateAnimatorControllerAtPath(path);
+            ac.AddParameter("Attack", AnimatorControllerParameterType.Trigger);
+            ac.AddParameter("Cast", AnimatorControllerParameterType.Trigger);
+            ac.AddParameter("Moving", AnimatorControllerParameterType.Bool);
+            var sm = ac.layers[0].stateMachine;
+
+            AnimatorState idleState = null;
+            if (idle != null)
+            {
+                idleState = sm.AddState("Idle");
+                idleState.motion = idle;
+                sm.defaultState = idleState;
+            }
+
+            var runState = sm.AddState("Run");
+            runState.motion = run;
+            if (idleState == null)
+                sm.defaultState = runState;
+            else
+            {
+                var toRun = idleState.AddTransition(runState);
+                toRun.AddCondition(AnimatorConditionMode.If, 0, "Moving");
+                toRun.hasExitTime = false;
+                toRun.duration = 0.08f;
+                var toIdle = runState.AddTransition(idleState);
+                toIdle.AddCondition(AnimatorConditionMode.IfNot, 0, "Moving");
+                toIdle.hasExitTime = false;
+                toIdle.duration = 0.08f;
+            }
+
+            var rest = idleState != null ? idleState : runState;
+            if (flourish != null && rest != null)
+            {
+                var cast = sm.AddState("Cast");
+                cast.motion = flourish;
+                cast.tag = "Cast";
+                var toCast = sm.AddAnyStateTransition(cast);
+                toCast.AddCondition(AnimatorConditionMode.If, 0, "Cast");
+                toCast.hasExitTime = false;
+                toCast.duration = 0.08f;
+                toCast.canTransitionToSelf = false;
+                var castRun = cast.AddTransition(runState);
+                castRun.AddCondition(AnimatorConditionMode.If, 0, "Moving");
+                castRun.hasExitTime = false;
+                castRun.duration = 0.08f;
+                var castIdle = cast.AddTransition(rest);
+                castIdle.hasExitTime = true;
+                castIdle.exitTime = 0.92f;
+                castIdle.hasFixedDuration = true;
+                castIdle.duration = 0.1f;
+            }
+
+            if (attack != null)
+            {
+                var atk = sm.AddState("Attack");
+                atk.motion = attack;
+                atk.tag = "Attack";
+                var toAtk = sm.AddAnyStateTransition(atk);
+                toAtk.AddCondition(AnimatorConditionMode.If, 0, "Attack");
+                toAtk.hasExitTime = false;
+                toAtk.duration = 0.06f;
+                toAtk.canTransitionToSelf = false;
+                var back = atk.AddTransition(rest);
+                back.hasExitTime = true;
+                back.exitTime = 0.88f;
+                back.hasFixedDuration = true;
+                back.duration = 0.1f;
+            }
+            EditorUtility.SetDirty(ac);
+            return ac;
+        }
+
         static AnimationClip[] LoadClips(string fbx)
         {
             var list = new System.Collections.Generic.List<AnimationClip>();
@@ -327,14 +426,14 @@ namespace Ashfold.Editor
             }
         }
 
-        static GameObject BuildCreepPrefab(string fbx, Material mat, AnimatorController controller, string prefabPath, string childName)
+        static GameObject BuildCreepPrefab(string fbx, Material mat, AnimatorController controller, string prefabPath, string childName, float height = MinionLocalHeight)
         {
             var root = new GameObject(Path.GetFileNameWithoutExtension(prefabPath));
             try
             {
                 var vis = InstantiateModel(fbx, root.transform, childName);
                 ApplyMat(vis, mat);
-                UprightFitSit(vis.transform, MinionLocalHeight);
+                UprightFitSit(vis.transform, height);
                 var anim = vis.GetComponent<Animator>() ?? vis.GetComponentInChildren<Animator>();
                 if (anim == null)
                     anim = vis.AddComponent<Animator>();
@@ -502,9 +601,9 @@ namespace Ashfold.Editor
                 auth.TurretDawn = ReplaceNamed(gameplay, "TurretDawn", turretPrefab, new Vector3(-16f, 0f, 0f), Yaw(true));
                 auth.TurretDusk = ReplaceNamed(gameplay, "TurretDusk", turretPrefab, new Vector3(16f, 0f, 0f), Yaw(false));
                 auth.CrystalDawn = ReplaceNamed(gameplay, "CrystalDawn", crystalPrefab,
-                    new Vector3(-FoldMapBuilder.HalfLength - 3.5f, 0f, 0f), Yaw(true));
+                    new Vector3(-FoldMapBuilder.LegacyHalfLength - 3.5f, 0f, 0f), Yaw(true));
                 auth.CrystalDusk = ReplaceNamed(gameplay, "CrystalDusk", crystalPrefab,
-                    new Vector3(FoldMapBuilder.HalfLength + 3.5f, 0f, 0f), Yaw(false));
+                    new Vector3(FoldMapBuilder.LegacyHalfLength + 3.5f, 0f, 0f), Yaw(false));
                 EditorUtility.SetDirty(auth);
                 PrefabUtility.SaveAsPrefabAsset(root, MapPrefab);
             }

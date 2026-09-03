@@ -10,6 +10,7 @@ namespace Ashfold
 
         CombatUnit _unit;
         Image _fill;
+        Image _lock;
         float _peakTop = float.NegativeInfinity;
 
         public static WorldHpBar Attach(CombatUnit unit)
@@ -25,7 +26,7 @@ namespace Ashfold
             AppUi.DisableWorldRaycasts(go);
 
             var rt = go.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(1.6f, 0.18f);
+            rt.sizeDelta = unit.IsTurret ? new Vector2(2.05f, 0.22f) : new Vector2(1.6f, 0.18f);
             rt.localScale = Vector3.one;
 
             var bar = go.AddComponent<WorldHpBar>();
@@ -35,11 +36,13 @@ namespace Ashfold
             MakeImage(rt, "Bg", sprite, new Color(0.08f, 0.08f, 0.09f, 0.92f), Vector2.zero, Vector2.one);
 
             var fillImg = MakeImage(rt, "Fill", sprite, FillColor(unit), Vector2.zero, Vector2.one);
-            fillImg.type = Image.Type.Filled;
-            fillImg.fillMethod = Image.FillMethod.Horizontal;
-            fillImg.fillOrigin = (int)Image.OriginHorizontal.Left;
-            fillImg.fillAmount = 1f;
             bar._fill = fillImg;
+            if (unit.IsTurret)
+            {
+                bar._lock = MakeImage(rt, "Lock", sprite, new Color(0.55f, 0.88f, 1f, 0.92f),
+                    new Vector2(1f - StructureRules.LockPortion, -0.12f), new Vector2(1f, 1.12f));
+                bar._lock.transform.SetAsLastSibling();
+            }
             return bar;
         }
 
@@ -62,8 +65,18 @@ namespace Ashfold
             if (cam != null)
                 transform.rotation = Quaternion.LookRotation(transform.position - cam.transform.position);
 
-            _fill.fillAmount = _unit.IsAlive ? _unit.Hp01 : 0f;
+            var hp = _unit.IsAlive ? _unit.Hp01 : 0f;
+            var fillRt = _fill.rectTransform;
+            fillRt.anchorMin = Vector2.zero;
+            fillRt.anchorMax = new Vector2(hp, 1f);
+            fillRt.offsetMin = Vector2.zero;
+            fillRt.offsetMax = Vector2.zero;
             _fill.color = FillColor(_unit);
+            if (_lock != null)
+            {
+                _lock.enabled = _unit.IsAlive && StructureRules.TurretFortified(_unit);
+                _lock.transform.SetAsLastSibling();
+            }
         }
 
         void PlaceAboveUnit()

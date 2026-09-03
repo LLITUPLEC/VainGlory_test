@@ -3,8 +3,8 @@ using UnityEngine;
 namespace Ashfold
 {
     /// <summary>
-    /// Бот: пуш мида, защита кристалла (герои важнее построек),
-    /// отход: рядом с базой — пешком; далеко — в куст и recall.
+    /// Бот: пуш мида, защита кристалла.
+    /// Отход: рядом с базой — пешком, далеко — recall на фонтан.
     /// </summary>
     public sealed class HeroBotAi : MonoBehaviour
     {
@@ -15,6 +15,7 @@ namespace Ashfold
         public Vector3 PushGoal;
         public int Gold = 80;
         public string PreferredItemId = "iron_edge";
+        int _laneI = -1;
 
         const float RetreatHp = 0.32f;
         const float RecoverHp = 0.72f;
@@ -26,7 +27,6 @@ namespace Ashfold
         bool _respawning;
         float _spawnGrace;
         bool _retreating;
-        Vector3 _recallSpot;
         bool _goingToBrush;
 
         void Start()
@@ -77,7 +77,7 @@ namespace Ashfold
                     Combat.CommandAttack(threat);
                     return;
                 }
-                Combat.CommandMove(PushGoal);
+                Combat.CommandMove(FoldMapBuilder.NextCommitted(Team, transform.position, ref _laneI));
                 return;
             }
 
@@ -107,7 +107,7 @@ namespace Ashfold
                 return;
             }
 
-            Combat.CommandMove(PushGoal);
+            Combat.CommandMove(FoldMapBuilder.NextCommitted(Team, transform.position, ref _laneI));
         }
 
         void TryCastReady()
@@ -160,76 +160,17 @@ namespace Ashfold
             {
                 _retreating = true;
                 _goingToBrush = DistToFountain() > NearBaseDist;
-                if (_goingToBrush)
-                    _recallSpot = NearestSafeBrush();
             }
         }
 
         void DoRetreat()
         {
-            // Уже у базы — только пешком на пад, без recall.
-            if (!_goingToBrush || DistToFountain() <= NearBaseDist)
+            if (DistToFountain() <= NearBaseDist)
             {
-                _goingToBrush = false;
                 Combat.CommandMove(Fountain);
                 return;
             }
-
-            // Далеко: дойти до куста вне линии, затем recall.
-            var brush = BrushZone.FindAt(transform.position);
-            var onLane = Mathf.Abs(transform.position.z) < 4.2f;
-            if (brush != null && !onLane)
-            {
-                Combat.TryRecall();
-                return;
-            }
-
-            Combat.CommandMove(_recallSpot);
-        }
-
-        Vector3 NearestSafeBrush()
-        {
-            var best = Fountain;
-            var bestSq = float.MaxValue;
-            var origin = transform.position;
-            // Предпочитаем куст «назад» к своей базе (по X).
-            var towardBase = Team == TeamId.Dawn ? -1f : 1f;
-
-            foreach (var b in BrushZone.All)
-            {
-                if (b == null)
-                    continue;
-                var p = b.transform.position;
-                // Не на миде.
-                if (Mathf.Abs(p.z) < 4f)
-                    continue;
-                // Ближе к своей половине карты.
-                if (Team == TeamId.Dawn && p.x > origin.x + 2f)
-                    continue;
-                if (Team == TeamId.Dusk && p.x < origin.x - 2f)
-                    continue;
-
-                var d = p - origin;
-                d.y = 0f;
-                // Небольшой бонус за направление к базе.
-                var score = d.sqrMagnitude - towardBase * (p.x - origin.x) * 8f;
-                if (score < bestSq)
-                {
-                    bestSq = score;
-                    best = p;
-                    best.y = 1.35f;
-                }
-            }
-
-            // Fallback: сместиться с линии в сторону леса + назад.
-            if (bestSq > 1e8f)
-            {
-                best = origin;
-                best.z = origin.z >= 0f ? 8f : -8f;
-                best.x += towardBase * 6f;
-                best.y = 1.35f;
-            }
-            return best;
+            Combat.TryRecall();
         }
 
         float DistToFountain()
@@ -300,6 +241,8 @@ namespace Ashfold
                 }
                 else if (u.IsStructure)
                 {
+                    if (!StructureRules.CanHurt(u))
+                        continue;
                     if (sq < bestStructSq)
                     {
                         bestStructSq = sq;
@@ -378,6 +321,7 @@ namespace Ashfold
             yield return new WaitForSeconds(wait);
 
             Combat.ReviveAt(Fountain);
+            _laneI = -1;
             _spawnGrace = 3.5f;
             _retreating = false;
             _goingToBrush = false;

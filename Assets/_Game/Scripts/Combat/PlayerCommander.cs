@@ -41,7 +41,7 @@ namespace Ashfold
             }
         }
 
-        public void OnWorldPointer(Vector2 screen)
+        public void OnWorldPointer(Vector2 screen, bool fatFinger = false)
         {
             if (Hero == null || Unit == null || !Unit.IsAlive)
                 return;
@@ -63,11 +63,8 @@ namespace Ashfold
                 StopAim();
                 return;
             }
-            var unit = PickUnit(ray);
-            if (unit == null && PlanePoint(ray, out var ground))
-                unit = NearestUnit(ground, 1.5f);
-
-            if (unit != null && Unit.IsEnemy(unit))
+            var unit = PickEnemy(ray, screen, cam, fatFinger);
+            if (unit != null)
             {
                 Hero.CommandAttack(unit);
                 if (Net())
@@ -239,14 +236,130 @@ namespace Ashfold
 
         static bool PlanePoint(Ray ray, out Vector3 point)
         {
-            var plane = new Plane(Vector3.up, Vector3.zero);
-            if (!plane.Raycast(ray, out var dist))
+            var hits = Physics.RaycastAll(ray, 250f);
+            var bestY = float.NegativeInfinity;
+            var found = false;
+            point = default;
+            for (var i = 0; i < hits.Length; i++)
             {
-                point = default;
-                return false;
+                var hit = hits[i];
+                if (hit.collider == null || !GroundProbe.IsGround(hit.collider))
+                    continue;
+                if (hit.point.y < bestY)
+                    continue;
+                bestY = hit.point.y;
+                point = hit.point;
+                found = true;
             }
+            if (found)
+                return true;
+            var plane = new Plane(Vector3.up, new Vector3(0f, GroundProbe.DefaultSurfaceY, 0f));
+            if (!plane.Raycast(ray, out var dist))
+                return false;
             point = ray.GetPoint(dist);
             return true;
+        }
+
+        CombatUnit PickEnemy(Ray ray, Vector2 screen, Camera cam, bool fatFinger)
+        {
+            var pad = fatFinger ? 108f : 64f;
+            CombatUnit best = null;
+            var bestScore = float.MaxValue;
+            foreach (var u in CombatUnit.All)
+            {
+                if (u == null || !u.IsAlive || !Unit.IsEnemy(u))
+                    continue;
+                if (!TapHitsUnit(u, cam, screen, pad, out var score))
+                    continue;
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    best = u;
+                }
+            }
+            if (best != null)
+                return best;
+            if (Physics.SphereCast(ray, fatFinger ? 1.15f : 0.85f, out var hit, 250f, ~0, QueryTriggerInteraction.Ignore))
+            {
+                var u = hit.collider.GetComponentInParent<CombatUnit>();
+                if (u != null && u.IsAlive && Unit.IsEnemy(u))
+                    return u;
+            }
+            var rayUnit = PickUnit(ray);
+            if (rayUnit != null && rayUnit.IsAlive && Unit.IsEnemy(rayUnit))
+                return rayUnit;
+            return null;
+        }
+
+        static bool TapHitsUnit(CombatUnit u, Camera cam, Vector2 screen, float pad, out float score)
+        {
+            score = float.MaxValue;
+            if (!ScreenRectOf(u, cam, out var rect, out var center))
+                return false;
+            rect.xMin -= pad;
+            rect.yMin -= pad;
+            rect.xMax += pad;
+            rect.yMax += pad;
+            if (!rect.Contains(screen))
+                return false;
+            score = Vector2.Distance(screen, center);
+            return true;
+        }
+
+        static bool ScreenRectOf(CombatUnit u, Camera cam, out Rect rect, out Vector2 center)
+        {
+            rect = default;
+            center = default;
+            var min = new Vector2(float.MaxValue, float.MaxValue);
+            var max = new Vector2(float.MinValue, float.MinValue);
+            var any = false;
+            var rends = u.GetComponentsInChildren<Renderer>();
+            for (var i = 0; i < rends.Length; i++)
+            {
+                var r = rends[i];
+                if (r == null || !r.enabled)
+                    continue;
+                EncapsulateScreen(cam, r.bounds, ref min, ref max, ref any);
+            }
+            if (!any)
+            {
+                var col = u.GetComponent<Collider>();
+                if (col != null)
+                    EncapsulateScreen(cam, col.bounds, ref min, ref max, ref any);
+            }
+            if (!any)
+            {
+                var sp = cam.WorldToScreenPoint(u.transform.position + Vector3.up * 1.1f);
+                if (sp.z <= 0.05f)
+                    return false;
+                center = new Vector2(sp.x, sp.y);
+                rect = new Rect(center.x - 40f, center.y - 40f, 80f, 80f);
+                return true;
+            }
+            rect = Rect.MinMaxRect(min.x, min.y, max.x, max.y);
+            center = rect.center;
+            return true;
+        }
+
+        static void EncapsulateScreen(Camera cam, Bounds b, ref Vector2 min, ref Vector2 max, ref bool any)
+        {
+            var c = b.center;
+            var e = b.extents;
+            for (var i = 0; i < 8; i++)
+            {
+                var p = c + new Vector3(
+                    (i & 1) == 0 ? -e.x : e.x,
+                    (i & 2) == 0 ? -e.y : e.y,
+                    (i & 4) == 0 ? -e.z : e.z);
+                var sp = cam.WorldToScreenPoint(p);
+                if (sp.z <= 0.05f)
+                    continue;
+                any = true;
+                if (sp.x < min.x) min.x = sp.x;
+                if (sp.y < min.y) min.y = sp.y;
+                if (sp.x > max.x) max.x = sp.x;
+                if (sp.y > max.y) max.y = sp.y;
+            }
         }
 
         static CombatUnit PickUnit(Ray ray)
@@ -262,26 +375,6 @@ namespace Ashfold
                 if (hit.distance < bestDist)
                 {
                     bestDist = hit.distance;
-                    best = u;
-                }
-            }
-            return best;
-        }
-
-        static CombatUnit NearestUnit(Vector3 point, float radius)
-        {
-            CombatUnit best = null;
-            var bestSq = radius * radius;
-            foreach (var u in CombatUnit.All)
-            {
-                if (u == null || !u.IsAlive)
-                    continue;
-                var d = u.transform.position;
-                d.y = point.y;
-                var sq = (d - point).sqrMagnitude;
-                if (sq < bestSq)
-                {
-                    bestSq = sq;
                     best = u;
                 }
             }

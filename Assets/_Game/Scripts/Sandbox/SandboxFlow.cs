@@ -64,17 +64,25 @@ namespace Ashfold
             }
             UnitFactory.MakeStructure(_map.CrystalDawn, TeamId.Dawn, CombatBalance.CrystalHp, 0, "Crystal", false, false);
             UnitFactory.MakeStructure(_map.CrystalDusk, TeamId.Dusk, CombatBalance.CrystalHp, 200, "Crystal", false, false);
-            UnitFactory.MakeStructure(_map.TurretDawn, TeamId.Dawn, CombatBalance.TurretHp, 0, "Turret", true, false);
-            UnitFactory.MakeStructure(_map.TurretDusk, TeamId.Dusk, CombatBalance.TurretHp, 120, "Turret", true, false);
+            BindTurrets(_map.TurretsDawn, TeamId.Dawn);
+            BindTurrets(_map.TurretsDusk, TeamId.Dusk);
             SilenceMapAi();
 
-            _dummyHome = _map.DawnSpawn + new Vector3(10f, 0f, 0f);
+            _dummyHome = _map.DawnSpawn + FoldMapBuilder.LaneDir(TeamId.Dawn) * 10f;
             SpawnPlayer();
             SpawnDummy();
             BuildPanel();
 
             if (BattleRuntime.I != null)
                 BattleRuntime.I.Gold = 9999;
+        }
+
+        static void BindTurrets(GameObject[] turrets, TeamId team)
+        {
+            if (turrets == null)
+                return;
+            for (var i = 0; i < turrets.Length; i++)
+                UnitFactory.MakeStructure(turrets[i], team, CombatBalance.TurretHp, i == 0 ? 0 : 120, "Turret", true, false);
         }
 
         void SilenceMapAi()
@@ -189,7 +197,8 @@ namespace Ashfold
             unit.GroundY = 1.1f;
             var motor = go.AddComponent<TapMoveMotor>();
             motor.Speed = 5.5f;
-            motor.GroundY = 1.1f;
+            motor.Hover = 1.1f;
+            motor.SnapToGround();
             WorldHpBar.Attach(unit);
             return go;
         }
@@ -210,7 +219,8 @@ namespace Ashfold
             unit.GroundY = 1.6f;
             var motor = go.AddComponent<TapMoveMotor>();
             motor.Speed = 2.4f;
-            motor.GroundY = 1.6f;
+            motor.Hover = 1.6f;
+            motor.SnapToGround();
             WorldHpBar.Attach(unit);
             var dummy = go.AddComponent<SandboxDummy>();
             dummy.MeleeDamage = 90f;

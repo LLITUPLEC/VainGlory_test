@@ -70,8 +70,7 @@ namespace Ashfold
                     away = Vector3.right;
                 away.Normalize();
                 var dest = transform.position + away * 10f;
-                dest.x = Mathf.Clamp(dest.x, -FoldMapBuilder.HalfLength + 2f, FoldMapBuilder.HalfLength - 2f);
-                dest.z = Mathf.Clamp(dest.z, -FoldMapBuilder.HalfWidth + 2f, FoldMapBuilder.HalfWidth - 2f);
+                dest = FoldMapBuilder.ClampPlayable(dest);
                 if (_hero != null)
                 {
                     _hero.AttackTarget = null;

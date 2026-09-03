@@ -95,7 +95,7 @@ namespace Ashfold
             {
                 if (u == null || !u.IsAlive)
                     continue;
-                if (!u.IsHero && !u.IsStructure)
+                if (!u.IsHero && !u.IsStructure && !u.IsBoss)
                     continue;
 
                 Color color;
@@ -104,6 +104,11 @@ namespace Ashfold
                 {
                     color = u.Team == TeamId.Dawn ? GameTheme.Teal : GameTheme.Crimson;
                     size = 10f;
+                }
+                else if (u.IsBoss)
+                {
+                    color = GameTheme.Gold;
+                    size = 14f;
                 }
                 else if (u.IsPlayer)
                 {

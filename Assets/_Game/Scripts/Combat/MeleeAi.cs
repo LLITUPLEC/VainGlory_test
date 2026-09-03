@@ -16,6 +16,7 @@ namespace Ashfold
         Vector3 _home;
         float _cd;
         CombatUnit _target;
+        int _laneI = -1;
 
         void Start()
         {
@@ -45,17 +46,16 @@ namespace Ashfold
                 return;
             }
 
-            if (_target != null && !_target.IsAlive)
+            if (_target != null && (!_target.IsAlive || !StructureRules.CanHurt(_target)))
                 _target = null;
             if (_target == null)
                 _target = AggroRules.Pick(Unit, Aggro, RoamLane ? AggroKind.Lane : AggroKind.Jungle);
 
             if (_target != null)
             {
-                var dist = Motor.DistTo(_target.transform.position);
-                if (dist > Range)
+                if (!StructureRules.InAttackRange(Unit, _target, Range))
                 {
-                    Motor.MoveTo(_target.transform.position);
+                    Motor.MoveTo(StructureRules.ApproachPoint(Unit, _target, Range));
                     return;
                 }
 
@@ -72,7 +72,7 @@ namespace Ashfold
             }
 
             if (RoamLane)
-                Motor.MoveTo(LaneGoal);
+                Motor.MoveTo(FoldMapBuilder.NextCommitted(Unit.Team, transform.position, ref _laneI));
             else if (DistFlat(transform.position, _home) > 0.3f)
                 Motor.MoveTo(_home);
             else

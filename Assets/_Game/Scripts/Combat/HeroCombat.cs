@@ -124,10 +124,9 @@ namespace Ashfold
             if (AttackTarget == null)
                 return;
 
-            var dist = Motor.DistTo(AttackTarget.transform.position);
-            if (dist > Def.AttackRange)
+            if (!StructureRules.InAttackRange(Unit, AttackTarget, Def.AttackRange))
             {
-                Motor.MoveTo(AttackTarget.transform.position);
+                Motor.MoveTo(StructureRules.ApproachPoint(Unit, AttackTarget, Def.AttackRange));
                 return;
             }
 
@@ -213,6 +212,7 @@ namespace Ashfold
                 Motor.Locked = false;
                 Motor.StunUntil = 0f;
                 Motor.Stop();
+                Motor.SnapToGround();
             }
             foreach (var r in GetComponentsInChildren<Renderer>(true))
                 r.enabled = true;

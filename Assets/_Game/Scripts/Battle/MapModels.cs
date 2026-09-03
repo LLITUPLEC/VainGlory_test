@@ -9,6 +9,7 @@ namespace Ashfold
         public const string CrystalRes = "Maps/Parts/Crystal";
         public const string MinionVisualRes = "Units/MinionVisual";
         public const string CaptainVisualRes = "Units/CaptainVisual";
+        public const string BossVisualRes = "Units/BossVisual";
 
         public static GameObject TryPlace(string resource, Transform parent, string name, Vector3 localPos, Quaternion localRot)
         {

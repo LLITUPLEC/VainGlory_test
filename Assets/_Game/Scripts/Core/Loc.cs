@@ -341,7 +341,7 @@ namespace Ashfold
             Add("sandbox.kind.minion", "Minion", "Крип");
             Add("sandbox.kind.jungle", "Jungle", "Лес");
             Add("sandbox.kind.hero", "Hero", "Герой");
-            Add("sandbox.kind.kraken", "Kraken", "Кракен");
+            Add("unit.nailchewer", "Nailchewer", "Гвоздожуй");
             Add("sandbox.act.idle", "Idle", "Стоит");
             Add("sandbox.act.attack", "Attack", "Атакует");
             Add("sandbox.act.flee", "Flee", "Убегает");

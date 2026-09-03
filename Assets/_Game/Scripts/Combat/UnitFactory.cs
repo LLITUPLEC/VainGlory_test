@@ -26,7 +26,8 @@ namespace Ashfold
 
             var motor = go.AddComponent<TapMoveMotor>();
             motor.Speed = def.MoveSpeed;
-            motor.GroundY = 1.35f;
+            motor.Hover = FoldMapBuilder.HeroGroundY;
+            motor.SnapToGround();
 
             var combat = go.AddComponent<HeroCombat>();
             combat.Def = def;
@@ -79,7 +80,8 @@ namespace Ashfold
 
             var motor = go.AddComponent<TapMoveMotor>();
             motor.Speed = CombatBalance.MinionSpeed;
-            motor.GroundY = gy;
+            motor.Hover = gy;
+            motor.SnapToGround();
 
             if (AttachMinionVisual(go.transform, motor, captain))
                 rend.enabled = false;
@@ -103,12 +105,16 @@ namespace Ashfold
 
         public static CombatUnit MakeStructure(GameObject go, TeamId team, float hp, int bounty, string name, bool turret, bool localAi = true)
         {
+            if (go == null)
+                return null;
             var unit = go.AddComponent<CombatUnit>();
             unit.Team = team;
             unit.MaxHp = hp;
             unit.Hp = hp;
             unit.Bounty = bounty;
             unit.IsStructure = true;
+            unit.IsTurret = turret;
+            unit.IsCrystal = name == "Crystal";
             unit.DisableOnDeath = false;
             unit.DisplayName = name;
             if (turret && localAi)
@@ -122,8 +128,11 @@ namespace Ashfold
             return unit;
         }
 
-        public static void MakeCamp(GameObject go)
+        public static void MakeCamp(GameObject go, bool localAi = true)
         {
+            if (go == null)
+                return;
+            var gy = go.transform.position.y;
             var unit = go.AddComponent<CombatUnit>();
             unit.Team = TeamId.Neutral;
             unit.MaxHp = 220f;
@@ -131,20 +140,32 @@ namespace Ashfold
             unit.Bounty = 28;
             unit.DisplayName = "Camp";
             unit.DisableOnDeath = false;
-            unit.GroundY = 0.4f;
+            unit.GroundY = gy;
             var motor = go.AddComponent<TapMoveMotor>();
             motor.Speed = 3.2f;
-            motor.GroundY = 0.4f;
-            var ai = go.AddComponent<MeleeAi>();
-            ai.Unit = unit;
-            ai.Motor = motor;
-            ai.Damage = 22f;
-            ai.Range = 1.8f;
-            ai.Aggro = 3.5f;
-            ai.RoamLane = false;
-            var camp = go.AddComponent<JungleCamp>();
-            camp.Unit = unit;
-            camp.Bind();
+            motor.Hover = 0.05f;
+            if (localAi)
+            {
+                var ai = go.AddComponent<MeleeAi>();
+                ai.Unit = unit;
+                ai.Motor = motor;
+                ai.Damage = 22f;
+                ai.Range = 1.8f;
+                ai.Aggro = 3.5f;
+                ai.RoamLane = false;
+            }
+            else
+                motor.enabled = false;
+            AttachCampVisual(go.transform, motor);
+            GroundProbe.SitOnGround(go.transform);
+            motor.Hover = Mathf.Max(0.02f, go.transform.position.y - GroundProbe.SurfaceY(go.transform.position));
+            motor.SnapToGround();
+            if (localAi)
+            {
+                var camp = go.AddComponent<JungleCamp>();
+                camp.Unit = unit;
+                camp.Bind();
+            }
             WorldHpBar.Attach(unit);
         }
 
@@ -164,13 +185,74 @@ namespace Ashfold
             unit.Bounty = 28;
             unit.DisplayName = "Camp";
             unit.DisableOnDeath = false;
-            unit.GroundY = 0.4f;
+            unit.GroundY = pos.y;
             var motor = go.AddComponent<TapMoveMotor>();
             motor.Speed = 3.2f;
-            motor.GroundY = 0.4f;
+            motor.Hover = 0.7f;
             motor.enabled = false;
+            GroundProbe.SitOnGround(go.transform);
+            motor.SnapToGround();
             WorldHpBar.Attach(unit);
             return go;
+        }
+
+        public static void HidePlaceholder(GameObject go)
+        {
+            if (go == null)
+                return;
+            foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+                r.enabled = false;
+            var col = go.GetComponent<Collider>();
+            if (col != null)
+                col.enabled = false;
+        }
+
+        public static void MakeBoss(GameObject go, bool localAi = true)
+        {
+            if (go == null || go.GetComponent<CombatUnit>() != null)
+                return;
+            var worldPos = go.transform.position;
+            go.transform.localScale = Vector3.one;
+            go.transform.SetPositionAndRotation(worldPos, Quaternion.Euler(0f, go.transform.eulerAngles.y, 0f));
+            foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+                r.enabled = false;
+            var col = go.GetComponent<Collider>();
+            if (col != null)
+                col.enabled = true;
+            var unit = go.AddComponent<CombatUnit>();
+            unit.Team = TeamId.Neutral;
+            unit.MaxHp = CombatBalance.BossHp;
+            unit.Hp = CombatBalance.BossHp;
+            unit.Bounty = CombatBalance.BossBounty;
+            unit.DisplayName = Loc.T("unit.nailchewer");
+            unit.DisableOnDeath = false;
+            unit.IsBoss = true;
+            unit.GroundY = go.transform.position.y;
+            var motor = go.AddComponent<TapMoveMotor>();
+            motor.Speed = CombatBalance.BossSpeed;
+            motor.Hover = 0.05f;
+            if (localAi)
+            {
+                var ai = go.AddComponent<MeleeAi>();
+                ai.Unit = unit;
+                ai.Motor = motor;
+                ai.Damage = CombatBalance.BossDamage;
+                ai.Range = CombatBalance.BossRange;
+                ai.Aggro = CombatBalance.BossAggro;
+                ai.Interval = CombatBalance.BossInterval;
+                ai.RoamLane = false;
+            }
+            else
+                motor.enabled = false;
+            if (!AttachBossVisual(go.transform, motor))
+            {
+                foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+                    r.enabled = true;
+            }
+            GroundProbe.SitOnGround(go.transform);
+            motor.Hover = 0.05f;
+            motor.SnapToGround();
+            WorldHpBar.Attach(unit);
         }
 
         static bool AttachMinionVisual(Transform root, TapMoveMotor motor, bool captain)
@@ -185,10 +267,75 @@ namespace Ashfold
             vis.transform.localPosition = new Vector3(0f, -1f, 0f);
             vis.transform.localRotation = Quaternion.identity;
             vis.transform.localScale = Vector3.one;
+            BindAnim(root, motor, vis);
+            return true;
+        }
+
+        static void AttachCampVisual(Transform root, TapMoveMotor motor)
+        {
+            var rend = root.GetComponent<Renderer>();
+            if (rend != null)
+                rend.enabled = false;
+            var prefab = Resources.Load<GameObject>(MapModels.CaptainVisualRes)
+                         ?? Resources.Load<GameObject>(MapModels.MinionVisualRes);
+            if (prefab == null)
+            {
+                if (rend != null)
+                    rend.enabled = true;
+                return;
+            }
+            var vis = Object.Instantiate(prefab, root, false);
+            vis.name = "Visual";
+            vis.transform.localPosition = Vector3.zero;
+            vis.transform.localRotation = Quaternion.identity;
+            vis.transform.localScale = Vector3.one;
+            BindAnim(root, motor, vis);
+        }
+
+        static bool AttachBossVisual(Transform root, TapMoveMotor motor)
+        {
+            var prefab = Resources.Load<GameObject>(MapModels.BossVisualRes);
+            if (prefab == null)
+                return false;
+            var vis = Object.Instantiate(prefab, root, false);
+            vis.name = "Visual";
+            vis.transform.localRotation = Quaternion.identity;
+            vis.transform.localScale = Vector3.one * 2f;
+            PlantVisualFeet(root, vis);
+            BindAnim(root, motor, vis);
+            return true;
+        }
+
+        static void PlantVisualFeet(Transform root, GameObject vis)
+        {
+            vis.transform.localPosition = Vector3.zero;
+            var bottom = float.PositiveInfinity;
+            var found = false;
+            foreach (var r in vis.GetComponentsInChildren<Renderer>(true))
+            {
+                if (r == null)
+                    continue;
+                r.enabled = true;
+                var b = r.bounds;
+                if (b.size.sqrMagnitude < 1e-6f)
+                    continue;
+                found = true;
+                if (b.min.y < bottom)
+                    bottom = b.min.y;
+            }
+            if (found)
+                vis.transform.position += Vector3.up * (root.position.y - bottom);
+            else
+                vis.transform.localPosition = new Vector3(0f, -1.05f, 0f);
+        }
+
+        static void BindAnim(Transform root, TapMoveMotor motor, GameObject vis)
+        {
             var anim = root.GetComponent<UnitAnim>() ?? root.gameObject.AddComponent<UnitAnim>();
             anim.Motor = motor;
             anim.Animator = vis.GetComponentInChildren<Animator>();
-            return true;
+            if (anim.Animator != null)
+                anim.Animator.applyRootMotion = false;
         }
 
         static void ApplySilhouette(Transform root, string id, Color color)

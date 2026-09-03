@@ -49,6 +49,8 @@ namespace Ashfold
 
                 if (u.IsStructure)
                 {
+                    if (!StructureRules.CanHurt(u))
+                        continue;
                     if (sq < structSq)
                     {
                         structSq = sq;

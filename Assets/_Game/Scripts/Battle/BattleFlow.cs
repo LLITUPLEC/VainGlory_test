@@ -58,32 +58,23 @@ namespace Ashfold
                 _net = gameObject.AddComponent<NetBattleSync>();
                 _runtime.CrystalDawn = UnitFactory.MakeStructure(map.CrystalDawn, TeamId.Dawn, CombatBalance.CrystalHp, 0, "Crystal", false, false);
                 _runtime.CrystalDusk = UnitFactory.MakeStructure(map.CrystalDusk, TeamId.Dusk, CombatBalance.CrystalHp, 200, "Crystal", false, false);
-                var turretDawn = UnitFactory.MakeStructure(map.TurretDawn, TeamId.Dawn, CombatBalance.TurretHp, 0, "Turret", true, false);
-                var turretDusk = UnitFactory.MakeStructure(map.TurretDusk, TeamId.Dusk, CombatBalance.TurretHp, 120, "Turret", true, false);
-                _net.Register(10, turretDawn);
-                _net.Register(11, turretDusk);
-                _net.Register(12, _runtime.CrystalDawn);
-                _net.Register(13, _runtime.CrystalDusk);
-                if (map.Camps != null)
-                {
-                    foreach (var camp in map.Camps)
-                    {
-                        if (camp != null)
-                            camp.SetActive(false);
-                    }
-                }
+                BindTurrets(map.TurretsDawn, TeamId.Dawn, false, FoldMapBuilder.NetTurretDawn0);
+                BindTurrets(map.TurretsDusk, TeamId.Dusk, false, FoldMapBuilder.NetTurretDusk0);
+                _net.Register(FoldMapBuilder.NetCrystalDawn, _runtime.CrystalDawn);
+                _net.Register(FoldMapBuilder.NetCrystalDusk, _runtime.CrystalDusk);
+                BindCamps(map.Camps, false);
             }
             else
             {
-                foreach (var camp in map.Camps)
-                    UnitFactory.MakeCamp(camp);
-
+                BindCamps(map.Camps, true);
                 _runtime.CrystalDawn = UnitFactory.MakeStructure(map.CrystalDawn, TeamId.Dawn, CombatBalance.CrystalHp, 0, "Crystal", false);
                 _runtime.CrystalDusk = UnitFactory.MakeStructure(map.CrystalDusk, TeamId.Dusk, CombatBalance.CrystalHp, 200, "Crystal", false);
-                UnitFactory.MakeStructure(map.TurretDawn, TeamId.Dawn, CombatBalance.TurretHp, 0, "Turret", true);
-                UnitFactory.MakeStructure(map.TurretDusk, TeamId.Dusk, CombatBalance.TurretHp, 120, "Turret", true);
-                _runtime.CrystalDawn.Killed += OnCrystalDown;
-                _runtime.CrystalDusk.Killed += OnCrystalDown;
+                BindTurrets(map.TurretsDawn, TeamId.Dawn, true, 0);
+                BindTurrets(map.TurretsDusk, TeamId.Dusk, true, 0);
+                if (_runtime.CrystalDawn != null)
+                    _runtime.CrystalDawn.Killed += OnCrystalDown;
+                if (_runtime.CrystalDusk != null)
+                    _runtime.CrystalDusk.Killed += OnCrystalDown;
             }
 
             SpawnRoster(map);
@@ -93,6 +84,8 @@ namespace Ashfold
                 var waves = gameObject.AddComponent<WaveSpawner>();
                 waves.Parent = transform;
             }
+
+            StartCoroutine(BossRoutine(map.Boss, !_networked));
 
             var cam = Camera.main;
             if (cam != null && _hero != null)
@@ -125,6 +118,37 @@ namespace Ashfold
                 HookSocket();
         }
 
+        void BindTurrets(GameObject[] turrets, TeamId team, bool localAi, int netBase)
+        {
+            if (turrets == null)
+                return;
+            for (var i = 0; i < turrets.Length; i++)
+            {
+                var bounty = i == 0 ? 0 : 120;
+                var unit = UnitFactory.MakeStructure(turrets[i], team, CombatBalance.TurretHp, bounty, "Turret", true, localAi);
+                if (_networked && _net != null && unit != null && netBase > 0)
+                    _net.Register(netBase + i, unit);
+            }
+        }
+
+        void BindCamps(GameObject[] camps, bool localAi)
+        {
+            if (camps == null)
+                return;
+            for (var i = 0; i < camps.Length; i++)
+            {
+                if (camps[i] == null)
+                    continue;
+                UnitFactory.MakeCamp(camps[i], localAi);
+                if (_networked && _net != null)
+                {
+                    var unit = camps[i].GetComponent<CombatUnit>();
+                    if (unit != null)
+                        _net.Register(FoldMapBuilder.NetCamp0 + i, unit);
+                }
+            }
+        }
+
         void SpawnRoster(FoldMap map)
         {
             var match = GameSession.I != null ? GameSession.I.Match : null;
@@ -143,7 +167,7 @@ namespace Ashfold
             {
                 var team = p.Team == 0 ? TeamId.Dawn : TeamId.Dusk;
                 var basePos = team == TeamId.Dawn ? map.DawnSpawn : map.DuskSpawn;
-                var offset = new Vector3(team == TeamId.Dawn ? 2f : -2f, 0f, (p.Slot - 1) * 2f);
+                var offset = new Vector3((p.Slot - 1) * 2f, 0f, 0f);
                 var heroId = string.IsNullOrEmpty(p.HeroId) ? "bastion" : p.HeroId;
                 var netId = p.Team * 3 + p.Slot + 1;
                 if (p.IsLocal)
@@ -160,8 +184,8 @@ namespace Ashfold
             var go = UnitFactory.SpawnHero(transform, pos, heroId, team, player);
             var combat = go.GetComponent<HeroCombat>();
             combat.FountainPos = team == TeamId.Dawn
-                ? new Vector3(-FoldMapBuilder.HalfLength, 1.35f, 0f)
-                : new Vector3(FoldMapBuilder.HalfLength, 1.35f, 0f);
+                ? FoldMapBuilder.DawnFountain
+                : FoldMapBuilder.DuskFountain;
 
             if (_networked)
             {
@@ -196,8 +220,8 @@ namespace Ashfold
             ai.Team = team;
             ai.Fountain = combat.FountainPos;
             ai.PushGoal = team == TeamId.Dawn
-                ? new Vector3(FoldMapBuilder.HalfLength + 2f, 1.35f, 0f)
-                : new Vector3(-FoldMapBuilder.HalfLength - 2f, 1.35f, 0f);
+                ? FoldMapBuilder.DuskFountain
+                : FoldMapBuilder.DawnFountain;
             ai.PreferredItemId = UnitFactory.PreferredItemFor(heroId);
         }
 
@@ -369,6 +393,20 @@ namespace Ashfold
             if (GameSession.I != null && GameSession.I.Match != null && GameSession.I.Match.Local != null)
                 localTeam = GameSession.I.Match.Local.Team;
             FinishMatch(winnerTeam == localTeam, surrendered);
+        }
+
+        IEnumerator BossRoutine(GameObject marker, bool localAi)
+        {
+            if (marker == null)
+                yield break;
+            UnitFactory.HidePlaceholder(marker);
+            if (!localAi)
+                yield break;
+            while (_runtime != null && !_runtime.MatchOver && _runtime.MatchTime < CombatBalance.BossSpawnTime)
+                yield return null;
+            if (_runtime == null || _runtime.MatchOver)
+                yield break;
+            UnitFactory.MakeBoss(marker, true);
         }
 
         void FinishMatch(bool victory, bool surrendered)

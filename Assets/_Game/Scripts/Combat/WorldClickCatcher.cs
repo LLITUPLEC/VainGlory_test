@@ -23,7 +23,9 @@ namespace Ashfold
         {
             if (Commander == null || eventData == null)
                 return;
-            Commander.OnWorldPointer(eventData.position);
+            var touch = UnityEngine.InputSystem.Touchscreen.current != null
+                        && UnityEngine.InputSystem.Touchscreen.current.touches.Count > 0;
+            Commander.OnWorldPointer(eventData.position, touch);
         }
     }
 }

@@ -312,6 +312,19 @@ namespace Ashfold
                 Register(e.id, camp);
                 return camp;
             }
+            if (e.kind == "boss")
+            {
+                var pos = new Vector3(e.x, 0.4f, e.z);
+                var go = UnitFactory.SpawnCamp(transform, pos);
+                go.name = "Boss";
+                var boss = go.GetComponent<CombatUnit>();
+                boss.IsBoss = true;
+                boss.MaxHp = CombatBalance.BossHp;
+                boss.Hp = e.hp > 0 ? e.hp : CombatBalance.BossHp;
+                boss.DisplayName = Loc.T("unit.nailchewer");
+                Register(e.id, boss);
+                return boss;
+            }
             if (e.kind != "minion" && e.kind != "captain")
                 return null;
             var team = MapTeam(e.team, e.kind);
@@ -327,7 +340,7 @@ namespace Ashfold
 
         static TeamId MapTeam(int serverTeam, string kind)
         {
-            if (kind == "camp" || serverTeam == 2)
+            if (kind == "camp" || kind == "boss" || serverTeam == 2)
                 return TeamId.Neutral;
             return serverTeam == 1 ? TeamId.Dusk : TeamId.Dawn;
         }

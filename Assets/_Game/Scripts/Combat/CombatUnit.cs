@@ -21,6 +21,9 @@ namespace Ashfold
         public bool IsHero;
         public bool IsPlayer;
         public bool IsStructure;
+        public bool IsTurret;
+        public bool IsCrystal;
+        public bool IsBoss;
         public string DisplayName = "Unit";
         public float StunUntil;
         public float GroundY = 1f;
@@ -133,6 +136,9 @@ namespace Ashfold
         public void ApplyDamage(float amount, CombatUnit source, DamageKind kind)
         {
             if (!IsAlive || amount <= 0f)
+                return;
+            amount = StructureRules.FilterDamage(this, amount);
+            if (amount <= 0f)
                 return;
             MarkHeroFight(this, source);
             if (source != null)
