@@ -7,6 +7,8 @@ namespace Ashfold
     {
         public Animator Animator;
         public TapMoveMotor Motor;
+        /// <summary>Сетевые юниты: мотор выключен, бег берём из интерполяции.</summary>
+        public bool NetMoving;
 
         const float IdleHold = 5f;
 
@@ -47,7 +49,8 @@ namespace Ashfold
             var attacking = st.IsTag("Attack") || st.IsName("Attack");
             var casting = st.IsTag("Cast") || st.IsName("Cast");
             var busy = attacking || casting || Animator.IsInTransition(0);
-            var moving = Motor != null && Motor.HasOrder && Motor.CanMove;
+            var motorMoving = Motor != null && Motor.enabled && Motor.HasOrder && Motor.CanMove;
+            var moving = motorMoving || NetMoving;
             if (_hasIdle)
             {
                 Animator.speed = 1f;

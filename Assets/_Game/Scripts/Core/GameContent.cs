@@ -44,6 +44,7 @@ namespace Ashfold
         public float BonusResist;
         public float BonusHealPower;
         public float BonusMoveSpeed;
+        public bool BuffOnly;
     }
 
     public static class GameContent
@@ -77,7 +78,8 @@ namespace Ashfold
             new ItemDef { Id = "stoneplate", DisplayName = "Stoneplate", Branch = "Defense", Cost = 150, Effect = "+180 HP", BonusHp = 180 },
             new ItemDef { Id = "wardcloak", DisplayName = "Wardcloak", Branch = "Defense", Cost = 150, Effect = "+18% resist", BonusResist = 0.18f },
             new ItemDef { Id = "lifewell", DisplayName = "Lifewell", Branch = "Support", Cost = 150, Effect = "+40% heal power", BonusHealPower = 0.4f },
-            new ItemDef { Id = "pulse_beacon", DisplayName = "Pulse Beacon", Branch = "Support", Cost = 150, Effect = "+12% move speed", BonusMoveSpeed = 0.12f }
+            new ItemDef { Id = "pulse_beacon", DisplayName = "Pulse Beacon", Branch = "Support", Cost = 150, Effect = "+12% move speed", BonusMoveSpeed = 0.12f },
+            new ItemDef { Id = "heroism", DisplayName = "Heroism", Branch = "Buff", Cost = 1500, Effect = "+300% HP/dmg/heal/resist, pierce turret lock", BuffOnly = true }
         };
 
         public static readonly string[] BotNames =

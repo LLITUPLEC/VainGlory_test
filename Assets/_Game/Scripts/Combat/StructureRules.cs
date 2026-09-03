@@ -83,7 +83,7 @@ namespace Ashfold
             return true;
         }
 
-        public static float FilterDamage(CombatUnit target, float amount)
+        public static float FilterDamage(CombatUnit target, float amount, CombatUnit source = null)
         {
             if (amount <= 0f || target == null || !target.IsAlive)
                 return 0f;
@@ -91,6 +91,9 @@ namespace Ashfold
                 return 0f;
             if (target.IsTurret && TurretFortified(target))
             {
+                var hc = source != null ? source.GetComponent<HeroCombat>() : null;
+                if (hc != null && hc.Heroism)
+                    return amount;
                 var floor = target.MaxHp * (1f - LockPortion);
                 if (target.Hp <= floor + 0.01f)
                     return 0f;

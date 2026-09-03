@@ -24,6 +24,7 @@ namespace Ashfold
 
         public MatchStatRow Register(CombatUnit unit, string name, string heroId, int team, bool isLocal, bool isBot)
         {
+            var startGold = isLocal ? (BattleRuntime.I != null ? BattleRuntime.I.Gold : 80) : 80;
             var row = new MatchStatRow
             {
                 Name = name,
@@ -31,7 +32,8 @@ namespace Ashfold
                 Team = team,
                 IsLocal = isLocal,
                 IsBot = isBot,
-                Gold = isLocal ? (BattleRuntime.I != null ? BattleRuntime.I.Gold : 80) : 80
+                Gold = startGold,
+                GoldEarned = 0
             };
             Rows.Add(row);
             ByUnit[unit] = row;
@@ -39,8 +41,34 @@ namespace Ashfold
             return row;
         }
 
+        public void AddGoldEarned(CombatUnit unit, int amount)
+        {
+            if (unit == null || amount <= 0)
+                return;
+            if (ByUnit.TryGetValue(unit, out var row))
+                row.GoldEarned += amount;
+        }
+
+        public void AddCreepKill(CombatUnit killer)
+        {
+            if (killer == null)
+                return;
+            if (ByUnit.TryGetValue(killer, out var row))
+                row.CreepKills++;
+        }
+
         void OnUnitKilled(CombatUnit victim, CombatUnit killer)
         {
+            if (victim == null)
+                return;
+
+            if (!victim.IsHero && !victim.IsStructure)
+            {
+                if (killer != null && killer.IsHero)
+                    AddCreepKill(killer);
+                return;
+            }
+
             if (!victim.IsHero)
                 return;
 
@@ -54,7 +82,6 @@ namespace Ashfold
                     BattleRuntime.I.Kills++;
             }
 
-            // Простые ассисты: союзные герои рядом с жертвой.
             if (killer == null)
                 return;
             foreach (var kv in ByUnit)
@@ -93,6 +120,19 @@ namespace Ashfold
                 if (combat != null)
                     row.Items.AddRange(combat.Items);
             }
+        }
+
+        public void ApplyNetStats(CombatUnit unit, int kills, int deaths, int gold, int creepKills, int goldEarned)
+        {
+            if (unit == null || !ByUnit.TryGetValue(unit, out var row))
+                return;
+            row.Kills = kills;
+            row.Deaths = deaths;
+            row.Gold = gold;
+            if (creepKills >= 0)
+                row.CreepKills = creepKills;
+            if (goldEarned >= 0)
+                row.GoldEarned = goldEarned;
         }
 
         public MatchResult BuildResult(bool victory, bool surrendered)

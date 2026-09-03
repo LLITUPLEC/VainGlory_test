@@ -250,15 +250,19 @@ namespace Ashfold
             Add("item.wardcloak.name", "Wardcloak", "Плащ стража");
             Add("item.lifewell.name", "Lifewell", "Живой источник");
             Add("item.pulse_beacon.name", "Pulse Beacon", "Импульсный маяк");
+            Add("item.heroism.name", "Heroism", "Героизм");
             Add("item.iron_edge.effect", "+25 attack", "+25 урона");
             Add("item.storm_charm.effect", "+25% attack speed", "+25% скорости атаки");
             Add("item.stoneplate.effect", "+180 HP", "+180 HP");
             Add("item.wardcloak.effect", "+18% resist", "+18% сопротивления");
             Add("item.lifewell.effect", "+40% heal power", "+40% силы лечения");
             Add("item.pulse_beacon.effect", "+12% move speed", "+12% скорости");
+            Add("item.heroism.effect", "+300% HP / damage / heal / resist, pierce turret lock", "+300% HP / урон / лечение / защита, игнор иммунитета турелей");
             Add("item.branch.damage", "Damage", "Урон");
             Add("item.branch.defense", "Defense", "Защита");
             Add("item.branch.support", "Support", "Поддержка");
+            Add("item.branch.buff", "Buff", "Баф");
+            Add("hud.buff_heroism", "HEROISM", "ГЕРОИЗМ");
 
             Add("mode.title", "SELECT MODE", "ВЫБОР РЕЖИМА");
             Add("mode.casual_btn", "CASUAL  3v3", "ОБЫЧНЫЙ  3v3");
@@ -299,8 +303,10 @@ namespace Ashfold
             Add("results.surrender", "DEFEAT  ·  SURRENDER", "ПОРАЖЕНИЕ  ·  СДАЧА");
             Add("results.victory_surrender", "VICTORY  ·  SURRENDER", "ПОБЕДА  ·  СДАЧА");
             Add("results.continue", "CONTINUE", "ПРОДОЛЖИТЬ");
-            Add("results.hdr", "PLAYER            KDA      GOLD", "ИГРОК            KDA      ЗОЛОТО");
+            Add("results.hdr", "PLAYER            KDA   CS    GOLD", "ИГРОК            KDA   КРИПЫ  ЗОЛОТО");
             Add("results.line", "{0}  ·  {1}  ·  +{2} ESSENCE", "{0}  ·  {1}  ·  +{2} ЭССЕНЦИЯ");
+            Add("results.row", "{0}{1}  {2}\n{3}/{4}/{5}   CS {6}   {7}g   {8}", "{0}{1}  {2}\n{3}/{4}/{5}   крипы {6}   {7}g   {8}");
+            Add("draft.taken", "TAKEN", "ЗАНЯТ");
             Add("results.stage", "STAGE 4  ·  RESULTS", "ЭТАП 4  ·  РЕЗУЛЬТАТЫ");
 
             Add("hud.items_empty", "ITEMS —", "ПРЕДМЕТЫ —");
@@ -311,6 +317,7 @@ namespace Ashfold
             Add("hud.shop", "SHOP", "МАГАЗИН");
             Add("hud.recall", "RECALL", "ВОЗВРАТ");
             Add("hud.surrender", "SURRENDER", "СДАТЬСЯ");
+            Add("hud.menu", "MENU", "МЕНЮ");
             Add("hud.respawn", "RESPAWN  {0}", "ВОЗРОЖДЕНИЕ  {0}");
             Add("hud.dead", "DEAD", "МЁРТВ");
             Add("hud.shop_fountain", "Shop only at fountain  ·  R to recall", "Магазин только у фонтана  ·  R для возврата");
@@ -322,6 +329,9 @@ namespace Ashfold
             Add("hud.aim_ground", "Click the map to place the ability  ·  right-click / Esc / same key to cancel", "Нажми на карту, куда падёт умение  ·  ПКМ / Esc / та же клавиша — отмена");
             Add("hud.ult_locked", "ULT  ·  LV {0}", "УЛЬТА  ·  УР {0}");
             Add("hud.fight", "FIGHT", "В БОЙ");
+            Add("hud.turret_ally_down", "Ally turret destroyed", "Союзная турель уничтожена");
+            Add("hud.turret_enemy_down", "Enemy turret destroyed", "Вражеская турель уничтожена");
+            Add("shop.active", "ACTIVE", "АКТИВЕН");
 
             Add("sandbox.title", "RANGE  ·  3v3 MAP", "ПОЛИГОН  ·  КАРТА 3v3");
             Add("sandbox.hero", "HERO", "ГЕРОЙ");

@@ -44,6 +44,8 @@ namespace Ashfold
         public const int SlotCount = 3;
 
         public static readonly int[] UltUnlockLevel = { 6, 9, 12 };
+        /// <summary>Ранг A: 4-й с 7 ур., 5-й с 9 ур. (индекс = целевой ранг − 1).</summary>
+        public static readonly int[] AbilityAUnlockLevel = { 1, 1, 1, 7, 9 };
 
         public static readonly int[] XpToReachLevel =
         {
@@ -65,6 +67,22 @@ namespace Ashfold
         public static int MaxRank(int slot)
         {
             return slot == (int)AbilitySlot.C ? MaxRankUlt : MaxRankAB;
+        }
+
+        public static int LevelForNextRank(int slot, int currentRank)
+        {
+            var next = currentRank + 1;
+            if (slot == (int)AbilitySlot.C)
+            {
+                var i = Mathf.Clamp(currentRank, 0, UltUnlockLevel.Length - 1);
+                return UltUnlockLevel[i];
+            }
+            if (slot == (int)AbilitySlot.A)
+            {
+                var i = Mathf.Clamp(next - 1, 0, AbilityAUnlockLevel.Length - 1);
+                return AbilityAUnlockLevel[i];
+            }
+            return 1;
         }
 
         /// <summary>Пассивный XP как в VG: уровень растёт и без киллов.</summary>

@@ -29,7 +29,11 @@ namespace Ashfold
         void OnKilled(CombatUnit victim, CombatUnit killer)
         {
             foreach (var r in GetComponentsInChildren<Renderer>())
+            {
+                if (r.GetComponentInParent<WorldHpBar>() != null)
+                    continue;
                 r.enabled = false;
+            }
             var col = GetComponent<Collider>();
             if (col != null)
                 col.enabled = false;
@@ -41,6 +45,8 @@ namespace Ashfold
             yield return new WaitForSeconds(Respawn);
             foreach (var r in GetComponentsInChildren<Renderer>(true))
             {
+                if (r.GetComponentInParent<WorldHpBar>() != null)
+                    continue;
                 if (r.transform == transform && transform.Find("Visual") != null)
                     continue;
                 r.enabled = true;

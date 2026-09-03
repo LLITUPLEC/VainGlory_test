@@ -78,10 +78,17 @@ namespace Ashfold
                 }
                 if (string.IsNullOrEmpty(items))
                     items = "—";
-                var label = (row.IsLocal ? Loc.T("draft.you") : "") + row.Name + "  " + hero.DisplayName + "\n" +
-                            row.Kills + " / " + row.Deaths + " / " + row.Assists + "     " + row.Gold + "g     " + items;
-                UiFactory.Label(line.transform, label, 15, GameTheme.Text, TextAnchor.MiddleLeft, FontStyle.Normal, true);
-                UiFactory.Stretch(line.GetComponentInChildren<Text>().rectTransform, 10, 4);
+                var label = Loc.T("results.row",
+                    row.IsLocal ? Loc.T("draft.you") : "",
+                    row.Name,
+                    hero.DisplayName,
+                    row.Kills, row.Deaths, row.Assists,
+                    row.CreepKills,
+                    row.GoldEarned,
+                    items);
+                var text = UiFactory.Label(line.transform, label, 15, GameTheme.Text, TextAnchor.MiddleLeft, FontStyle.Normal, true);
+                UiFactory.Stretch(text.rectTransform, 10, 4);
+                UiFactory.EnableBestFit(text, 12, 18);
                 i++;
             }
         }

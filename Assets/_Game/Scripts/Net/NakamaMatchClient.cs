@@ -105,9 +105,17 @@ namespace Ashfold
             Send(NakamaConnection.OpInputAttack, JsonUtility.ToJson(new NetTargetDto { targetId = targetId, seq = NextSeq() }));
         }
 
-        public void SendSkill(float yaw, int slot = 0)
+        public void SendSkill(float yaw, int slot = 0, float gx = 0f, float gz = 0f, int targetId = 0)
         {
-            Send(NakamaConnection.OpInputSkill, JsonUtility.ToJson(new NetSkillDto { yaw = yaw, seq = NextSeq(), slot = slot }));
+            Send(NakamaConnection.OpInputSkill, JsonUtility.ToJson(new NetSkillDto
+            {
+                yaw = yaw,
+                seq = NextSeq(),
+                slot = slot,
+                gx = gx,
+                gz = gz,
+                targetId = targetId
+            }));
         }
 
         public void SendRecall()

@@ -16,6 +16,8 @@ namespace Ashfold
         public float MatchTime;
         public float Countdown;
         public const float CountdownSeconds = 10f;
+        /// <summary>PvP: часы и престарт ведёт сервер через снапшоты.</summary>
+        public bool NetClock;
 
         public bool InPrep => Countdown > 0f;
         public bool Frozen => MatchOver || InPrep;
@@ -32,7 +34,7 @@ namespace Ashfold
 
         void Update()
         {
-            if (MatchOver)
+            if (MatchOver || NetClock)
                 return;
             if (Countdown > 0f)
             {
@@ -52,7 +54,11 @@ namespace Ashfold
 
         public void AddGold(int amount)
         {
+            if (amount <= 0)
+                return;
             Gold += amount;
+            if (Player != null && MatchStatsTracker.I != null)
+                MatchStatsTracker.I.AddGoldEarned(Player, amount);
         }
 
         public void RegisterKill(CombatUnit victim, CombatUnit killer)

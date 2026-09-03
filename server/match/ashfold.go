@@ -33,6 +33,7 @@ const (
 	humansToStart    = 2
 	draftTicks       = 20 * tickRate
 	loadingTicks     = 4 * tickRate
+	prepTicks        = 10 * tickRate
 	reconnectTicks   = 30 * tickRate
 	matchTimeLimit   = 10 * 60
 	phaseWaiting     = "waiting"
@@ -82,6 +83,7 @@ type State struct {
 	DraftLeftTicks   int
 	LoadingLeftTicks int
 	MatchTimeTicks   int64
+	PrepLeftTicks    int
 	WinnerTeam       int
 	Surrendered      bool
 	DraftStarted     bool
@@ -337,8 +339,9 @@ func tickLoading(s *State, logger runtime.Logger) bool {
 		return false
 	}
 	s.Phase = phaseCombat
+	s.PrepLeftTicks = prepTicks
 	s.WaveTicks = 20
-	logger.Info("combat start")
+	logger.Info("combat start prep=%d", prepTicks)
 	return true
 }
 
@@ -406,7 +409,10 @@ func lockNextBot(s *State, index int) bool {
 		if r == nil || !r.Bot || r.Locked {
 			continue
 		}
-		r.HeroId = ids[index%len(ids)]
+		r.HeroId = firstFreeHero(s, ids, "")
+		if r.HeroId == "" {
+			r.HeroId = ids[index%len(ids)]
+		}
 		r.Locked = true
 		return true
 	}
@@ -423,11 +429,17 @@ func lockRemaining(s *State) {
 			}
 			continue
 		}
-		if r.HeroId == "" {
+		if r.HeroId == "" || heroTaken(s, r.HeroId, r.UserId) {
 			if r.Bot {
-				r.HeroId = ids[botIndex%len(ids)]
+				r.HeroId = firstFreeHero(s, ids, r.UserId)
+				if r.HeroId == "" {
+					r.HeroId = ids[botIndex%len(ids)]
+				}
 			} else {
-				r.HeroId = "bastion"
+				r.HeroId = firstFreeHero(s, ids, r.UserId)
+				if r.HeroId == "" {
+					r.HeroId = "bastion"
+				}
 			}
 		}
 		r.Locked = true
@@ -435,6 +447,30 @@ func lockRemaining(s *State) {
 			botIndex++
 		}
 	}
+}
+
+func heroTaken(s *State, heroId, exceptUser string) bool {
+	if heroId == "" {
+		return false
+	}
+	for _, r := range s.Roster {
+		if r == nil || r.UserId == exceptUser || r.HeroId == "" {
+			continue
+		}
+		if r.HeroId == heroId {
+			return true
+		}
+	}
+	return false
+}
+
+func firstFreeHero(s *State, ids []string, exceptUser string) string {
+	for _, id := range ids {
+		if !heroTaken(s, id, exceptUser) {
+			return id
+		}
+	}
+	return ""
 }
 
 func allHumansLocked(s *State) bool {
@@ -463,7 +499,18 @@ func applyPick(s *State, userId string, data []byte, lock bool) {
 	if r == nil || r.Bot || r.Locked {
 		return
 	}
-	r.HeroId = resolveHeroId(dto.HeroId)
+	id := resolveHeroId(dto.HeroId)
+	if heroTaken(s, id, userId) {
+		if lock {
+			id = firstFreeHero(s, []string{"bastion", "vesper", "mira"}, userId)
+			if id == "" {
+				return
+			}
+		} else {
+			return
+		}
+	}
+	r.HeroId = id
 	if lock {
 		r.Locked = true
 	}

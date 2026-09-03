@@ -13,6 +13,8 @@ namespace Ashfold
         public int Deaths;
         public int Assists;
         public int Gold;
+        public int GoldEarned;
+        public int CreepKills;
         public readonly List<string> Items = new List<string>(6);
     }
 

@@ -57,6 +57,15 @@ namespace Ashfold
                     SpawnMissing(e);
             }
 
+            if (BattleRuntime.I != null)
+            {
+                BattleRuntime.I.MatchTime = snap.matchTime;
+                if (snap.prepLeft > 0.01f)
+                    BattleRuntime.I.Countdown = snap.prepLeft;
+                else if (snap.phase == "combat" || snap.phase == "ended")
+                    BattleRuntime.I.Countdown = 0f;
+            }
+
             _prune.Clear();
             foreach (var kv in _units)
             {
@@ -113,12 +122,8 @@ namespace Ashfold
             if (BattleRuntime.I != null && GameSession.I.MatchClient.Snapshot != null)
                 BattleRuntime.I.MatchTime = GameSession.I.MatchClient.Snapshot.matchTime;
 
-            if (MatchStatsTracker.I != null && MatchStatsTracker.I.ByUnit.TryGetValue(unit, out var row))
-            {
-                row.Kills = e.kills;
-                row.Deaths = e.deaths;
-                row.Gold = e.gold;
-            }
+            if (MatchStatsTracker.I != null)
+                MatchStatsTracker.I.ApplyNetStats(unit, e.kills, e.deaths, e.gold, e.creepKills, e.goldEarned);
 
             if (unit.IsPlayer && BattleRuntime.I != null)
             {
@@ -129,7 +134,12 @@ namespace Ashfold
 
             var combat = unit.GetComponent<HeroCombat>();
             if (combat != null)
+            {
                 combat.ApplyItemsCsv(e.itemsCsv);
+                combat.SetHeroism(e.heroism);
+            }
+
+            unit.RespawnLeft = e.alive ? 0f : Mathf.Max(0f, e.respawn);
             var snapPos = new Vector3(e.x, unit.GroundY, e.z);
             if (unit.IsPlayer && combat != null && e.hp < prevHp - 0.4f)
                 combat.CancelRecall();
@@ -153,6 +163,8 @@ namespace Ashfold
                 unit.Hp = 0f;
                 if (_dead.Add(e.id))
                 {
+                    if (unit.IsTurret && BattleHud.I != null)
+                        BattleHud.I.AnnounceTurretDown(unit);
                     if (combat != null)
                         combat.BeginDeathLock();
                     else
@@ -269,6 +281,12 @@ namespace Ashfold
                 unit.transform.position = Vector3.Lerp(from, to, t);
                 var yaw = Mathf.LerpAngle(ea.yaw, eb.yaw, t);
                 unit.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+                var anim = unit.GetComponent<UnitAnim>();
+                if (anim != null)
+                {
+                    var spanMove = Vector2.Distance(new Vector2(ea.x, ea.z), new Vector2(eb.x, eb.z));
+                    anim.NetMoving = spanMove > 0.08f;
+                }
             }
         }
 
@@ -315,13 +333,10 @@ namespace Ashfold
             if (e.kind == "boss")
             {
                 var pos = new Vector3(e.x, 0.4f, e.z);
-                var go = UnitFactory.SpawnCamp(transform, pos);
-                go.name = "Boss";
+                var go = UnitFactory.SpawnBoss(transform, pos);
                 var boss = go.GetComponent<CombatUnit>();
-                boss.IsBoss = true;
-                boss.MaxHp = CombatBalance.BossHp;
-                boss.Hp = e.hp > 0 ? e.hp : CombatBalance.BossHp;
-                boss.DisplayName = Loc.T("unit.nailchewer");
+                if (e.hp > 0)
+                    boss.Hp = e.hp;
                 Register(e.id, boss);
                 return boss;
             }

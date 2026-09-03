@@ -38,6 +38,7 @@ namespace Ashfold
         public float LastHitAt;
         public float SlowUntil;
         public float SlowFactor;
+        public float RespawnLeft;
 
         public bool DisableOnDeath = true;
 
@@ -137,7 +138,7 @@ namespace Ashfold
         {
             if (!IsAlive || amount <= 0f)
                 return;
-            amount = StructureRules.FilterDamage(this, amount);
+            amount = StructureRules.FilterDamage(this, amount, source);
             if (amount <= 0f)
                 return;
             MarkHeroFight(this, source);

@@ -4,7 +4,7 @@ namespace Ashfold
 {
     /// <summary>
     /// Бот: пуш мида, защита кристалла.
-    /// Отход: рядом с базой — пешком, далеко — recall на фонтан.
+    /// Отход при &lt;30% HP к союзной турели/кристаллу, затем recall на фонтан.
     /// </summary>
     public sealed class HeroBotAi : MonoBehaviour
     {
@@ -17,17 +17,22 @@ namespace Ashfold
         public string PreferredItemId = "iron_edge";
         int _laneI = -1;
 
-        const float RetreatHp = 0.32f;
+        const float RetreatHp = 0.30f;
         const float RecoverHp = 0.72f;
         const float NearBaseDist = 14f;
         const float CrystalDefendRadius = 16f;
 
         float _think;
-        bool _bought;
         bool _respawning;
         float _spawnGrace;
         bool _retreating;
-        bool _goingToBrush;
+
+        static readonly string[] BuildCarry =
+            { "iron_edge", "storm_charm", "iron_edge", "stoneplate", "stoneplate", "wardcloak" };
+        static readonly string[] BuildTank =
+            { "stoneplate", "stoneplate", "wardcloak", "wardcloak", "wardcloak", "iron_edge" };
+        static readonly string[] BuildSupport =
+            { "lifewell", "lifewell", "pulse_beacon", "stoneplate", "stoneplate", "wardcloak" };
 
         void Start()
         {
@@ -48,16 +53,22 @@ namespace Ashfold
             if (Combat == null || Unit == null || _respawning || !Unit.IsAlive)
                 return;
 
-            // Фонтанный реген (иначе крутятся у базы с низким HP).
             if (FoldMapBuilder.InFountain(transform.position, Team))
                 Unit.Heal(Unit.MaxHp * 0.22f * Time.deltaTime);
 
             if (_spawnGrace > 0f)
                 _spawnGrace -= Time.deltaTime;
 
-            // Recall крутится сам в HeroCombat — не сбиваем.
             if (Combat.Recalling)
                 return;
+
+            // Ретрит проверяем каждый кадр — иначе бот успевает умереть под турелью между тиками AI.
+            UpdateRetreatState();
+            if (_retreating)
+            {
+                DoRetreat();
+                return;
+            }
 
             _think -= Time.deltaTime;
             if (_think > 0f)
@@ -69,7 +80,6 @@ namespace Ashfold
 
             if (_spawnGrace > 0f)
             {
-                // Если кристалл бьют — сразу защищаем, без «выбега на мид».
                 var threat = FindCrystalThreat(12f);
                 if (threat != null)
                 {
@@ -78,13 +88,6 @@ namespace Ashfold
                     return;
                 }
                 Combat.CommandMove(FoldMapBuilder.NextCommitted(Team, transform.position, ref _laneI));
-                return;
-            }
-
-            UpdateRetreatState();
-            if (_retreating)
-            {
-                DoRetreat();
                 return;
             }
 
@@ -99,11 +102,23 @@ namespace Ashfold
                 return;
             }
 
-            // Глобальная угроза кристалла даже вне обычного агро.
             var crystalThreat = FindCrystalThreat(CrystalDefendRadius + 8f);
             if (crystalThreat != null)
             {
                 Combat.CommandAttack(crystalThreat);
+                return;
+            }
+
+            // Не заходить под укреплённую турель без крипов.
+            var lockedTurret = FindFortifiedEnemyTurret(CombatBalance.TurretRange + 1.2f);
+            if (lockedTurret != null)
+            {
+                var away = transform.position - lockedTurret.transform.position;
+                away.y = 0f;
+                if (away.sqrMagnitude < 0.01f)
+                    away = Team == TeamId.Dawn ? Vector3.left : Vector3.right;
+                var safe = lockedTurret.transform.position + away.normalized * (CombatBalance.TurretRange + 2.5f);
+                Combat.CommandMove(safe);
                 return;
             }
 
@@ -130,17 +145,13 @@ namespace Ashfold
             var rank = Combat.Progress != null ? Combat.Progress.RankOf(slot) : 1;
             if (def == null)
                 return false;
-            var range = def.Rng(rank);
-            var target = FindTarget(Mathf.Max(range, Combat.Def.AttackRange + 1f));
-            if (def.Targeting == AbilityTargeting.NeedTarget || def.Targeting == AbilityTargeting.Ground)
-            {
-                target = FindTarget(range);
-                if (target == null)
-                    return false;
-            }
-            if (target != null)
-                Combat.CommandAttack(target);
-            var ground = target != null ? target.transform.position : Combat.transform.position + Combat.transform.forward * range * 0.6f;
+            var range = def.Rng(Mathf.Max(1, rank));
+            // Не тратить умения «в пустоту» на бегу — нужен враг в радиусе.
+            var target = FindTarget(Mathf.Max(range, 1.5f));
+            if (target == null)
+                return false;
+            Combat.CommandAttack(target);
+            var ground = target.transform.position;
             return Combat.TryCastSkill(slot, target, ground);
         }
 
@@ -149,18 +160,12 @@ namespace Ashfold
             if (_retreating)
             {
                 if (FoldMapBuilder.InFountain(transform.position, Team) && Unit.Hp01 >= RecoverHp)
-                {
                     _retreating = false;
-                    _goingToBrush = false;
-                }
                 return;
             }
 
             if (Unit.Hp01 < RetreatHp && !FoldMapBuilder.InFountain(transform.position, Team))
-            {
                 _retreating = true;
-                _goingToBrush = DistToFountain() > NearBaseDist;
-            }
         }
 
         void DoRetreat()
@@ -170,7 +175,64 @@ namespace Ashfold
                 Combat.CommandMove(Fountain);
                 return;
             }
+
+            var safe = NearestAllyStructure();
+            if (safe != null)
+            {
+                var behind = BehindStructure(safe);
+                if (DistFlat(transform.position, behind) > 2.2f)
+                {
+                    Combat.CommandMove(behind);
+                    return;
+                }
+            }
+
             Combat.TryRecall();
+        }
+
+        /// <summary>Точка ЗА союзной постройкой (со стороны фонтана), а не в её центре.</summary>
+        Vector3 BehindStructure(CombatUnit structure)
+        {
+            var from = structure.transform.position;
+            from.y = 0f;
+            var toFountain = Fountain;
+            toFountain.y = 0f;
+            var dir = toFountain - from;
+            if (dir.sqrMagnitude < 0.01f)
+                dir = Team == TeamId.Dawn ? Vector3.left : Vector3.right;
+            dir.Normalize();
+            var back = StructureRules.BodyRadius(structure) + 3.8f;
+            var p = from + dir * back;
+            p.y = transform.position.y;
+            return p;
+        }
+
+        CombatUnit NearestAllyStructure()
+        {
+            CombatUnit bestTurret = null;
+            CombatUnit bestAny = null;
+            var bestTurretSq = float.MaxValue;
+            var bestAnySq = float.MaxValue;
+            var origin = transform.position;
+            foreach (var u in CombatUnit.All)
+            {
+                if (u == null || !u.IsAlive || u.Team != Team || !u.IsStructure)
+                    continue;
+                var d = u.transform.position - origin;
+                d.y = 0f;
+                var sq = d.sqrMagnitude;
+                if (sq < bestAnySq)
+                {
+                    bestAnySq = sq;
+                    bestAny = u;
+                }
+                if (u.IsTurret && sq < bestTurretSq)
+                {
+                    bestTurretSq = sq;
+                    bestTurret = u;
+                }
+            }
+            return bestTurret != null ? bestTurret : bestAny;
         }
 
         float DistToFountain()
@@ -182,26 +244,39 @@ namespace Ashfold
             return Vector3.Distance(a, b);
         }
 
+        string[] ShopBuild()
+        {
+            if (Combat == null || Combat.Def == null)
+                return BuildCarry;
+            switch (Combat.Def.Role)
+            {
+                case HeroRole.Tank: return BuildTank;
+                case HeroRole.Support: return BuildSupport;
+                default: return BuildCarry;
+            }
+        }
+
         bool TryShop()
         {
-            if (_bought || Combat.Items.Count > 0)
+            if (Combat.Items.Count >= HeroCombat.MaxItems)
                 return false;
             if (!FoldMapBuilder.InFountain(transform.position, Team))
                 return false;
 
-            var item = GameContent.GetItem(PreferredItemId) ?? GameContent.Items[0];
-            if (Gold < item.Cost)
+            var build = ShopBuild();
+            if (Combat.Items.Count >= build.Length)
+                return false;
+
+            var nextId = build[Combat.Items.Count];
+            var item = GameContent.GetItem(nextId);
+            if (item == null || Gold < item.Cost)
                 return false;
             if (!Combat.TryBuyFree(item))
                 return false;
             Gold -= item.Cost;
-            _bought = true;
             return true;
         }
 
-        /// <summary>
-        /// Приоритет: герои у союзного кристалла → герои → крипы → постройки.
-        /// </summary>
         CombatUnit FindTarget(float radius)
         {
             CombatUnit bestHeroThreat = null;
@@ -243,6 +318,9 @@ namespace Ashfold
                 {
                     if (!StructureRules.CanHurt(u))
                         continue;
+                    // Не лезть под укреплённую турель без крипов.
+                    if (u.IsTurret && StructureRules.TurretFortified(u))
+                        continue;
                     if (sq < bestStructSq)
                     {
                         bestStructSq = sq;
@@ -263,6 +341,29 @@ namespace Ashfold
             if (bestCreep != null)
                 return bestCreep;
             return bestStruct;
+        }
+
+        CombatUnit FindFortifiedEnemyTurret(float radius)
+        {
+            CombatUnit best = null;
+            var bestSq = radius * radius;
+            var origin = transform.position;
+            foreach (var u in CombatUnit.All)
+            {
+                if (u == null || !u.IsAlive || !u.IsTurret || !Unit.IsEnemy(u))
+                    continue;
+                if (!StructureRules.TurretFortified(u))
+                    continue;
+                var d = u.transform.position - origin;
+                d.y = 0f;
+                var sq = d.sqrMagnitude;
+                if (sq < bestSq)
+                {
+                    bestSq = sq;
+                    best = u;
+                }
+            }
+            return best;
         }
 
         CombatUnit FindCrystalThreat(float radiusFromCrystal)
@@ -308,7 +409,6 @@ namespace Ashfold
             if (_respawning)
                 return;
             _retreating = false;
-            _goingToBrush = false;
             StartCoroutine(Respawn());
         }
 
@@ -318,19 +418,30 @@ namespace Ashfold
             Combat.BeginDeathLock();
 
             var wait = RespawnRules.DurationSeconds();
-            yield return new WaitForSeconds(wait);
+            if (Unit != null)
+                Unit.RespawnLeft = wait;
+            while (Unit != null && Unit.RespawnLeft > 0f)
+            {
+                Unit.RespawnLeft -= Time.deltaTime;
+                yield return null;
+            }
 
             Combat.ReviveAt(Fountain);
+            if (Unit != null)
+                Unit.RespawnLeft = 0f;
             _laneI = -1;
             _spawnGrace = 3.5f;
             _retreating = false;
-            _goingToBrush = false;
             _respawning = false;
         }
 
         public void AddGold(int amount)
         {
+            if (amount <= 0)
+                return;
             Gold += amount;
+            if (Unit != null && MatchStatsTracker.I != null)
+                MatchStatsTracker.I.AddGoldEarned(Unit, amount);
         }
     }
 }

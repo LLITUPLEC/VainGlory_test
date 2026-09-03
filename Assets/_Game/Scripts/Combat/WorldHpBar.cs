@@ -11,6 +11,7 @@ namespace Ashfold
         CombatUnit _unit;
         Image _fill;
         Image _lock;
+        Canvas _canvas;
         float _peakTop = float.NegativeInfinity;
 
         public static WorldHpBar Attach(CombatUnit unit)
@@ -31,6 +32,7 @@ namespace Ashfold
 
             var bar = go.AddComponent<WorldHpBar>();
             bar._unit = unit;
+            bar._canvas = canvas;
 
             var sprite = WhiteSprite();
             MakeImage(rt, "Bg", sprite, new Color(0.08f, 0.08f, 0.09f, 0.92f), Vector2.zero, Vector2.one);
@@ -51,6 +53,12 @@ namespace Ashfold
             if (_unit == null || _fill == null)
                 return;
 
+            var show = _unit.IsAlive && _unit.Hp > 0f;
+            if (_canvas != null)
+                _canvas.enabled = show;
+            if (!show)
+                return;
+
             var parent = transform.parent;
             if (parent != null)
             {
@@ -65,7 +73,7 @@ namespace Ashfold
             if (cam != null)
                 transform.rotation = Quaternion.LookRotation(transform.position - cam.transform.position);
 
-            var hp = _unit.IsAlive ? _unit.Hp01 : 0f;
+            var hp = _unit.Hp01;
             var fillRt = _fill.rectTransform;
             fillRt.anchorMin = Vector2.zero;
             fillRt.anchorMax = new Vector2(hp, 1f);
@@ -74,7 +82,7 @@ namespace Ashfold
             _fill.color = FillColor(_unit);
             if (_lock != null)
             {
-                _lock.enabled = _unit.IsAlive && StructureRules.TurretFortified(_unit);
+                _lock.enabled = StructureRules.TurretFortified(_unit);
                 _lock.transform.SetAsLastSibling();
             }
         }

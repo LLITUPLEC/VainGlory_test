@@ -86,6 +86,17 @@ namespace Ashfold
             return t;
         }
 
+        public static void EnableBestFit(Text t, int minSize, int maxSize)
+        {
+            if (t == null)
+                return;
+            t.resizeTextForBestFit = true;
+            t.resizeTextMinSize = Mathf.Max(8, minSize);
+            t.resizeTextMaxSize = Mathf.Max(minSize, maxSize);
+            t.horizontalOverflow = HorizontalWrapMode.Wrap;
+            t.verticalOverflow = VerticalWrapMode.Truncate;
+        }
+
         public static Button Button(Transform parent, string caption, UnityAction onClick, Color bg, Color fg)
         {
             var go = new GameObject("Btn_" + caption, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));

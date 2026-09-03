@@ -20,6 +20,7 @@ namespace Ashfold
         Text _timer;
         Text[] _slotLabels;
         Image[] _heroCards;
+        Button[] _heroButtons;
         Button _lockBtn;
         string _pickedId;
         Coroutine _routine;
@@ -456,6 +457,7 @@ namespace Ashfold
             BuildTeamColumn(canvas.transform, 1, 0.70f, Loc.T("draft.dusk"));
 
             _heroCards = new Image[GameContent.Heroes.Length];
+            _heroButtons = new Button[GameContent.Heroes.Length];
             for (var i = 0; i < GameContent.Heroes.Length; i++)
             {
                 var hero = GameContent.Heroes[i];
@@ -465,6 +467,7 @@ namespace Ashfold
                 UiFactory.SetAnchors(btn.GetComponent<RectTransform>(), new Vector2(x0, 0.30f), new Vector2(x0 + 0.14f, 0.72f), Vector2.zero, Vector2.zero);
                 btn.GetComponentInChildren<Text>().fontSize = 18;
                 btn.interactable = unlocked;
+                _heroButtons[i] = btn;
                 _heroCards[i] = btn.GetComponent<Image>();
                 var swatch = UiFactory.Box(btn.transform, new Vector2(0.15f, 0.55f), new Vector2(0.85f, 0.92f), Vector2.zero, Vector2.zero, unlocked ? GameContent.HeroColor(hero.Id) : GameTheme.TextMuted, "C");
                 swatch.raycastTarget = false;
@@ -476,8 +479,11 @@ namespace Ashfold
             var stage = UiFactory.Box(canvas.transform, new Vector2(0.02f, 0.01f), new Vector2(0.3f, 0.06f), Vector2.zero, Vector2.zero, Color.clear, "St");
             UiFactory.Label(stage.transform, Loc.T("draft.stage"), 14, GameTheme.GoldDim, TextAnchor.MiddleLeft);
 
+            if (IsHeroTaken(_pickedId, GameSession.I.Match.Local))
+                _pickedId = FirstFreeHero(GameSession.I.Match.Local) ?? _pickedId;
             SelectHero(_pickedId);
             RefreshSlots();
+            RefreshHeroCards();
             if (GameSession.I != null && GameSession.I.Match != null && GameSession.I.Match.IsNetworked)
                 _routine = StartCoroutine(NetDraftRoutine());
             else
@@ -508,15 +514,13 @@ namespace Ashfold
                 return;
             if (GameSession.I != null && GameSession.I.Profile != null && !GameSession.I.Profile.IsHeroUnlocked(id))
                 return;
+            var local = GameSession.I != null && GameSession.I.Match != null ? GameSession.I.Match.Local : null;
+            if (IsHeroTaken(id, local))
+                return;
             _pickedId = id;
-            for (var i = 0; i < GameContent.Heroes.Length; i++)
-            {
-                var selected = GameContent.Heroes[i].Id == id;
-                _heroCards[i].color = selected ? GameTheme.GoldDim : GameTheme.BgPanel;
-            }
+            RefreshHeroCards();
             if (NetDraft())
             {
-                var local = GameSession.I.Match.Local;
                 if (local != null && !local.Locked)
                     local.HeroId = id;
                 GameSession.I.MatchClient.SendPick(id);
@@ -528,8 +532,16 @@ namespace Ashfold
         {
             if (_locked)
                 return;
-            _locked = true;
             var local = GameSession.I.Match.Local;
+            if (IsHeroTaken(_pickedId, local))
+            {
+                var free = FirstFreeHero(local);
+                if (free == null)
+                    return;
+                _pickedId = free;
+                RefreshHeroCards();
+            }
+            _locked = true;
             local.HeroId = _pickedId;
             local.Locked = true;
             _lockBtn.interactable = false;
@@ -537,6 +549,7 @@ namespace Ashfold
             if (NetDraft())
                 GameSession.I.MatchClient.SendLock(_pickedId);
             RefreshSlots();
+            RefreshHeroCards();
         }
 
         static bool NetDraft()
@@ -570,6 +583,13 @@ namespace Ashfold
                 if (_timer != null)
                     _timer.text = "0:" + Mathf.CeilToInt(Mathf.Max(0f, mc != null ? mc.DraftLeft : 0f)).ToString("00");
                 RefreshSlots();
+                RefreshHeroCards();
+                if (!_locked && IsHeroTaken(_pickedId, local))
+                {
+                    var free = FirstFreeHero(local);
+                    if (free != null)
+                        SelectHero(free);
+                }
 
                 if (phase == "loading" || phase == "combat" || phase == "ended")
                     break;
@@ -600,6 +620,7 @@ namespace Ashfold
                     LockNextBot(botsQueued);
                     botsQueued++;
                     RefreshSlots();
+                    RefreshHeroCards();
                 }
 
                 if (_locked && AllLocked())
@@ -627,7 +648,7 @@ namespace Ashfold
 
         void LockNextBot(int index)
         {
-            var bots = new System.Collections.Generic.List<MatchParticipant>();
+            var bots = new List<MatchParticipant>();
             foreach (var p in GameSession.I.Match.Players)
             {
                 if (p.IsBot && !p.Locked)
@@ -636,7 +657,8 @@ namespace Ashfold
             if (bots.Count == 0)
                 return;
             var bot = bots[0];
-            bot.HeroId = GameContent.Heroes[index % GameContent.Heroes.Length].Id;
+            var free = FirstFreeHero(bot);
+            bot.HeroId = free ?? GameContent.Heroes[index % GameContent.Heroes.Length].Id;
             bot.Locked = true;
         }
 
@@ -650,6 +672,63 @@ namespace Ashfold
                     return false;
             }
             return true;
+        }
+
+        static bool IsHeroTaken(string heroId, MatchParticipant except)
+        {
+            if (string.IsNullOrEmpty(heroId) || GameSession.I == null || GameSession.I.Match == null)
+                return false;
+            foreach (var p in GameSession.I.Match.Players)
+            {
+                if (p == null || p == except)
+                    continue;
+                if (string.IsNullOrEmpty(p.HeroId))
+                    continue;
+                if (p.HeroId == heroId)
+                    return true;
+            }
+            return false;
+        }
+
+        static string FirstFreeHero(MatchParticipant except)
+        {
+            foreach (var h in GameContent.Heroes)
+            {
+                if (except != null
+                    && GameSession.I != null
+                    && GameSession.I.Profile != null
+                    && except.IsLocal
+                    && !GameSession.I.Profile.IsHeroUnlocked(h.Id))
+                    continue;
+                if (!IsHeroTaken(h.Id, except))
+                    return h.Id;
+            }
+            return null;
+        }
+
+        void RefreshHeroCards()
+        {
+            if (_heroCards == null)
+                return;
+            var local = GameSession.I != null && GameSession.I.Match != null ? GameSession.I.Match.Local : null;
+            for (var i = 0; i < GameContent.Heroes.Length; i++)
+            {
+                var hero = GameContent.Heroes[i];
+                var unlocked = GameSession.I == null || GameSession.I.Profile == null || GameSession.I.Profile.IsHeroUnlocked(hero.Id);
+                var taken = IsHeroTaken(hero.Id, local);
+                var selected = hero.Id == _pickedId;
+                if (_heroCards[i] != null)
+                {
+                    if (selected)
+                        _heroCards[i].color = GameTheme.GoldDim;
+                    else if (taken)
+                        _heroCards[i].color = GameTheme.Hex(0x2A2A2E, 0.85f);
+                    else
+                        _heroCards[i].color = GameTheme.BgPanel;
+                }
+                if (_heroButtons != null && i < _heroButtons.Length && _heroButtons[i] != null)
+                    _heroButtons[i].interactable = !_locked && unlocked && !taken;
+            }
         }
 
         void RefreshSlots()

@@ -57,7 +57,7 @@ namespace Ashfold
                 if (t == null)
                     continue;
                 var n = t.name;
-                if (n == "AimMark" || n == "MapPing" || n.StartsWith("RangeRing_"))
+                if (n == "AimMark" || n == "AimRange" || n == "MapPing" || n.StartsWith("RangeRing_"))
                     Object.Destroy(t.gameObject);
             }
         }

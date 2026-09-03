@@ -32,6 +32,7 @@ namespace Ashfold
         void Start()
         {
             _networked = GameSession.I != null && GameSession.I.Match != null && GameSession.I.Match.IsNetworked;
+            _runtime.NetClock = _networked;
             if (Application.isMobilePlatform)
             {
                 QualitySettings.shadows = ShadowQuality.Disable;
@@ -113,6 +114,7 @@ namespace Ashfold
             }
 
             _runtime.BeginCountdown(BattleRuntime.CountdownSeconds);
+            // В PvP точный престарт придёт со снапшота (prepLeft); локальный отсчёт — запасной.
 
             if (_networked)
                 HookSocket();
@@ -126,9 +128,17 @@ namespace Ashfold
             {
                 var bounty = i == 0 ? 0 : 120;
                 var unit = UnitFactory.MakeStructure(turrets[i], team, CombatBalance.TurretHp, bounty, "Turret", true, localAi);
+                if (unit != null)
+                    unit.Killed += OnTurretDown;
                 if (_networked && _net != null && unit != null && netBase > 0)
                     _net.Register(netBase + i, unit);
             }
+        }
+
+        void OnTurretDown(CombatUnit victim, CombatUnit killer)
+        {
+            if (_hud != null)
+                _hud.AnnounceTurretDown(victim);
         }
 
         void BindCamps(GameObject[] camps, bool localAi)
@@ -233,6 +243,8 @@ namespace Ashfold
             if (_networked || !_playerDead || _hud == null)
                 return;
             _respawnLeft -= Time.deltaTime;
+            if (_hero != null && _hero.Unit != null)
+                _hero.Unit.RespawnLeft = Mathf.Max(0f, _respawnLeft);
             _hud.SetDeathTimer(Mathf.Max(0f, _respawnLeft));
         }
 
@@ -339,6 +351,8 @@ namespace Ashfold
             _playerDead = true;
             var wait = RespawnRules.DurationSeconds();
             _respawnLeft = wait;
+            if (_hero != null && _hero.Unit != null)
+                _hero.Unit.RespawnLeft = wait;
             _hero.BeginDeathLock();
 
             if (_hud != null)
@@ -347,6 +361,8 @@ namespace Ashfold
             yield return new WaitForSeconds(wait);
 
             _hero.ReviveAt(_spawn);
+            if (_hero.Unit != null)
+                _hero.Unit.RespawnLeft = 0f;
             _playerDead = false;
             if (_hud != null)
                 _hud.ClearDeathTimer();
@@ -355,6 +371,8 @@ namespace Ashfold
         public void ShowNetDeath(float seconds)
         {
             _playerDead = true;
+            if (_hero != null && _hero.Unit != null)
+                _hero.Unit.RespawnLeft = Mathf.Max(0f, seconds);
             if (_hud != null)
                 _hud.SetDeathTimer(Mathf.Max(0f, seconds));
         }
@@ -362,6 +380,8 @@ namespace Ashfold
         public void ClearNetDeath()
         {
             _playerDead = false;
+            if (_hero != null && _hero.Unit != null)
+                _hero.Unit.RespawnLeft = 0f;
             if (_hud != null)
                 _hud.ClearDeathTimer();
         }

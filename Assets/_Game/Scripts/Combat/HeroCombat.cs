@@ -17,6 +17,8 @@ namespace Ashfold
         public float RecallT;
         public const float RecallDuration = 2.5f;
         public const int MaxItems = 6;
+        public bool Heroism;
+        public const float HeroismMul = 4f;
         float _buyLockUntil;
 
         public HeroProgression Progress
@@ -312,7 +314,9 @@ namespace Ashfold
             {
                 AbilityCaster.PlayFx(this, def, ground);
                 if (GameSession.I != null && GameSession.I.MatchClient != null)
-                    GameSession.I.MatchClient.SendSkill(transform.eulerAngles.y, slot);
+                    GameSession.I.MatchClient.SendSkill(
+                        transform.eulerAngles.y, slot, ground.x, ground.z,
+                        target != null ? target.NetId : 0);
             }
             else
                 AbilityCaster.Execute(this, def, rank, target, ground);
@@ -387,8 +391,6 @@ namespace Ashfold
         {
             if (item == null || BattleRuntime.I == null || Unit == null)
                 return false;
-            if (Items.Count >= MaxItems)
-                return false;
             if (!FoldMapBuilder.InFountain(transform.position, Unit.Team))
                 return false;
             if (BattleRuntime.I.Gold < item.Cost)
@@ -396,9 +398,23 @@ namespace Ashfold
             if (ServerAuth && Time.unscaledTime < _buyLockUntil)
                 return false;
 
-            Items.Add(item.Id);
-            BattleRuntime.I.Gold -= item.Cost;
-            ApplyItems();
+            if (item.BuffOnly)
+            {
+                if (Heroism)
+                    return false;
+                BattleRuntime.I.Gold -= item.Cost;
+                Heroism = true;
+                ApplyItems();
+            }
+            else
+            {
+                if (Items.Count >= MaxItems)
+                    return false;
+                Items.Add(item.Id);
+                BattleRuntime.I.Gold -= item.Cost;
+                ApplyItems();
+            }
+
             if (ServerAuth)
             {
                 _buyLockUntil = Time.unscaledTime + 0.45f;
@@ -406,6 +422,14 @@ namespace Ashfold
                     GameSession.I.MatchClient.SendBuy(item.Id);
             }
             return true;
+        }
+
+        public void SetHeroism(bool on)
+        {
+            if (Heroism == on)
+                return;
+            Heroism = on;
+            ApplyItems();
         }
 
         public void ApplyItemsCsv(string csv)
@@ -450,7 +474,7 @@ namespace Ashfold
         /// <summary>Покупка без списания из BattleRuntime (для бот-кошелька).</summary>
         public bool TryBuyFree(ItemDef item)
         {
-            if (item == null || Items.Count >= MaxItems || Unit == null)
+            if (item == null || item.BuffOnly || Items.Count >= MaxItems || Unit == null)
                 return false;
             if (!FoldMapBuilder.InFountain(transform.position, Unit.Team))
                 return false;
@@ -470,7 +494,7 @@ namespace Ashfold
             foreach (var id in Items)
             {
                 var item = GameContent.GetItem(id);
-                if (item == null)
+                if (item == null || item.BuffOnly)
                     continue;
                 ExtraDamage += item.BonusDamage;
                 ExtraAs += item.BonusAttackSpeed;
@@ -480,11 +504,18 @@ namespace Ashfold
                 resist += item.BonusResist;
             }
 
-            var newMax = Def.MaxHp + hp;
+            var mul = Heroism ? HeroismMul : 1f;
+            ExtraDamage = (Def.Damage + ExtraDamage) * mul - Def.Damage;
+            ExtraHeal *= mul;
+            // Скорость (хода и атаки) Героизм не трогает.
+
+            var newMax = (Def.MaxHp + hp) * mul;
             if (newMax > Unit.MaxHp)
                 Unit.Hp += newMax - Unit.MaxHp;
             Unit.MaxHp = newMax;
-            Unit.Resist = Mathf.Clamp01(resist);
+            if (Unit.Hp > Unit.MaxHp)
+                Unit.Hp = Unit.MaxHp;
+            Unit.Resist = Mathf.Clamp01(resist * mul);
             Motor.Speed = Def.MoveSpeed * (1f + ExtraMove);
         }
     }

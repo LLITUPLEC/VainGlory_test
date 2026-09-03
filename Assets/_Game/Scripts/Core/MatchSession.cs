@@ -76,6 +76,7 @@ namespace Ashfold
         public long tick;
         public string phase;
         public float matchTime;
+        public float prepLeft;
         public int winnerTeam;
         public bool surrendered;
         public NetEntityDto[] entities;
@@ -102,12 +103,15 @@ namespace Ashfold
         public int kills;
         public int deaths;
         public int gold;
+        public int goldEarned;
+        public int creepKills;
         public int targetId;
         public int ackSeq;
         public float stunLeft;
         public bool recalling;
         public float recallLeft;
         public string itemsCsv;
+        public bool heroism;
     }
 
     [Serializable]
@@ -136,12 +140,15 @@ namespace Ashfold
     }
 
     [Serializable]
-        public sealed class NetSkillDto
-        {
-            public float yaw;
-            public int seq;
-            public int slot;
-        }
+    public sealed class NetSkillDto
+    {
+        public float yaw;
+        public int seq;
+        public int slot;
+        public float gx;
+        public float gz;
+        public int targetId;
+    }
 
     [Serializable]
     public sealed class NetBuyDto

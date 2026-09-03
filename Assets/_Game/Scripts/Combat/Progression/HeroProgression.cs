@@ -39,12 +39,8 @@ namespace Ashfold
             var rank = Rank[slot];
             if (rank >= HeroRules.MaxRank(slot))
                 return false;
-            if (slot == (int)AbilitySlot.C)
-            {
-                var need = HeroRules.UltUnlockLevel[Mathf.Clamp(rank, 0, HeroRules.UltUnlockLevel.Length - 1)];
-                if (Level < need)
-                    return false;
-            }
+            if (Level < HeroRules.LevelForNextRank(slot, rank))
+                return false;
             return true;
         }
 

@@ -66,7 +66,9 @@ type hero struct {
 	Kills        int
 	Deaths       int
 	Gold         int
-	SkillCd      float64
+	GoldEarned   int
+	CreepKills   int
+	SkillCd      [3]float64
 	StunLeft     float64
 	Recalling    bool
 	RecallLeft   float64
@@ -74,6 +76,7 @@ type hero struct {
 	Resist       float64
 	HealPower    float64
 	LaneI        int
+	Heroism      bool
 }
 
 type hitEvent struct {
@@ -102,12 +105,15 @@ type snapEntity struct {
 	Kills    int     `json:"kills"`
 	Deaths   int     `json:"deaths"`
 	Gold     int     `json:"gold"`
+	GoldEarned int   `json:"goldEarned"`
+	CreepKills int   `json:"creepKills"`
 	TargetId  int     `json:"targetId"`
 	AckSeq    int     `json:"ackSeq"`
 	StunLeft  float64 `json:"stunLeft"`
 	Recalling bool    `json:"recalling"`
 	RecallLeft float64 `json:"recallLeft"`
 	ItemsCsv   string  `json:"itemsCsv"`
+	Heroism    bool    `json:"heroism"`
 }
 
 type snapDTO struct {
@@ -115,6 +121,7 @@ type snapDTO struct {
 	Tick        int64        `json:"tick"`
 	Phase       string       `json:"phase"`
 	MatchTime   float64      `json:"matchTime"`
+	PrepLeft    float64      `json:"prepLeft"`
 	WinnerTeam  int          `json:"winnerTeam"`
 	Surrendered bool         `json:"surrendered"`
 	Entities    []snapEntity `json:"entities"`
@@ -197,6 +204,7 @@ func spawnHeroes(s *State) {
 			Ranged: def.Ranged,
 			Alive:  true,
 			Gold:   80,
+			GoldEarned: 0,
 			Items:  make([]string, 0, maxItems),
 		}
 	}
@@ -292,8 +300,12 @@ func applySkillInput(s *State, userId string, data []byte) {
 		return
 	}
 	var dto struct {
-		Yaw float64 `json:"yaw"`
-		Seq int     `json:"seq"`
+		Yaw      float64 `json:"yaw"`
+		Seq      int     `json:"seq"`
+		Slot     int     `json:"slot"`
+		GX       float64 `json:"gx"`
+		GZ       float64 `json:"gz"`
+		TargetId int     `json:"targetId"`
 	}
 	if json.Unmarshal(data, &dto) != nil {
 		return
@@ -301,20 +313,61 @@ func applySkillInput(s *State, userId string, data []byte) {
 	if staleSeq(h, dto.Seq) {
 		return
 	}
-	if h.SkillCd > 0 {
+	slot := dto.Slot
+	if slot < 0 || slot > 2 {
+		slot = 0
+	}
+	if h.SkillCd[slot] > 0 {
 		return
 	}
 	def := resolveHero(h.HeroId)
+	spec := skillOf(h.HeroId, slot, def)
 	cancelRecall(h)
-	h.SkillCd = def.SkillCD
+	h.SkillCd[slot] = spec.cd
 	h.Yaw = dto.Yaw
-	switch h.HeroId {
-	case "vesper":
-		castBolt(s, h, def)
-	case "mira":
-		castNova(s, h, def)
+	switch slot {
+	case 1:
+		castSingle(s, h, spec.power, spec.rng, dto.TargetId)
+	case 2:
+		castBurst(s, h, spec, dto.GX, dto.GZ)
 	default:
-		castCone(s, h, def)
+		switch h.HeroId {
+		case "vesper":
+			castBolt(s, h, def)
+		case "mira":
+			castNova(s, h, def)
+		default:
+			castCone(s, h, def)
+		}
+	}
+}
+
+type skillSpec struct {
+	cd, power, rng, radius, slow float64
+}
+
+func skillOf(heroId string, slot int, def heroDef) skillSpec {
+	switch slot {
+	case 1:
+		switch heroId {
+		case "vesper":
+			return skillSpec{cd: 9, power: 80, rng: 7.5}
+		case "mira":
+			return skillSpec{cd: 11, power: 60, rng: 6}
+		default:
+			return skillSpec{cd: 10, power: 70, rng: 4}
+		}
+	case 2:
+		switch heroId {
+		case "vesper":
+			return skillSpec{cd: 45, power: 200, rng: 9, radius: 2.8}
+		case "mira":
+			return skillSpec{cd: 42, power: 160, rng: 8.5, radius: 3.4}
+		default:
+			return skillSpec{cd: 40, power: 180, rng: 8, radius: 3.2, slow: 0.3}
+		}
+	default:
+		return skillSpec{cd: def.SkillCD, power: def.SkillPower, rng: def.SkillRange}
 	}
 }
 
@@ -371,6 +424,47 @@ func castBolt(s *State, h *hero, def heroDef) {
 	}
 	if best != 0 {
 		hurtSkill(s, h.ID, h.Team, true, scaledSkill(h, def), best)
+	}
+}
+
+func castSingle(s *State, h *hero, power, rng float64, targetId int) {
+	id := targetId
+	if x, z, team, ok := liveXZ(s, id); !ok || team == h.Team || dist(h.X, h.Z, x, z) > rng {
+		id = nearestHostile(s, h.X, h.Z, h.Team, rng, false)
+	}
+	if id == 0 {
+		return
+	}
+	hurtSkill(s, h.ID, h.Team, true, power, id)
+}
+
+func castBurst(s *State, h *hero, spec skillSpec, gx, gz float64) {
+	d := dist(h.X, h.Z, gx, gz)
+	if d > spec.rng && d > 0.01 {
+		t := spec.rng / d
+		gx = h.X + (gx-h.X)*t
+		gz = h.Z + (gz-h.Z)*t
+	}
+	rad := spec.radius
+	if rad < 0.5 {
+		rad = 2.8
+	}
+	pwr := spec.power * (1 + h.HealPower)
+	for _, t := range s.Heroes {
+		if t == nil || !t.Alive || t.Team == h.Team {
+			continue
+		}
+		if dist(gx, gz, t.X, t.Z) <= rad {
+			hurtSkill(s, h.ID, h.Team, true, pwr, t.ID)
+		}
+	}
+	for _, u := range s.Extras {
+		if u == nil || !u.Alive || u.Team == h.Team {
+			continue
+		}
+		if dist(gx, gz, u.X, u.Z) <= rad {
+			hurtSkill(s, h.ID, h.Team, true, pwr, u.ID)
+		}
 	}
 }
 
@@ -444,7 +538,7 @@ func staleSeq(h *hero, seq int) bool {
 }
 
 func controllable(s *State, userId string) *hero {
-	if s.Phase != phaseCombat {
+	if s.Phase != phaseCombat || s.PrepLeftTicks > 0 {
 		return nil
 	}
 	h := heroByUser(s, userId)
@@ -470,6 +564,10 @@ func setDest(h *hero, x, z float64) {
 }
 
 func tickCombat(s *State) {
+	if s.PrepLeftTicks > 0 {
+		s.PrepLeftTicks--
+		return
+	}
 	s.MatchTimeTicks++
 	if s.Tick%botThinkMod == 0 {
 		thinkBots(s)
@@ -488,20 +586,22 @@ func thinkBots(s *State) {
 		}
 		ratio := h.HP / h.MaxHP
 		if inFountain(h) {
-			if len(h.Items) == 0 {
-				tryBuy(h, preferredItem(h.HeroId))
-			}
+			tryBuyNext(h)
 			if ratio < recoverHp {
 				h.AttackTarget = 0
 				h.HasMove = false
 				continue
 			}
 		}
+		if h.Recalling {
+			continue
+		}
 		if ratio < retreatHp && !inFountain(h) {
 			h.AttackTarget = 0
 			fx, fz := fountainXZ(h.Team)
 			if dist(h.X, h.Z, fx, fz) > 14 {
-				h.X, h.Z = fx, fz
+				h.Recalling = true
+				h.RecallLeft = 2.5
 				h.HasMove = false
 			} else {
 				setDest(h, fx, fz)
@@ -536,7 +636,7 @@ func stepHero(s *State, h *hero) {
 			h.AttackTarget = 0
 			h.HasMove = false
 			h.AttackCd = 0
-			h.SkillCd = 0
+			h.SkillCd = [3]float64{}
 			h.StunLeft = 0
 			h.LaneI = -1
 			cancelRecall(h)
@@ -547,8 +647,10 @@ func stepHero(s *State, h *hero) {
 	if h.AttackCd > 0 {
 		h.AttackCd -= dt
 	}
-	if h.SkillCd > 0 {
-		h.SkillCd -= dt
+	for i := range h.SkillCd {
+		if h.SkillCd[i] > 0 {
+			h.SkillCd[i] -= dt
+		}
 	}
 	if h.StunLeft > 0 {
 		h.StunLeft -= dt
@@ -699,12 +801,15 @@ func snapshotPayload(s *State) []byte {
 			Kills:    h.Kills,
 			Deaths:   h.Deaths,
 			Gold:     h.Gold,
+			GoldEarned: h.GoldEarned,
+			CreepKills: h.CreepKills,
 			TargetId:  h.AttackTarget,
 			AckSeq:    h.LastSeq,
 			StunLeft:  h.StunLeft,
 			Recalling: h.Recalling,
 			RecallLeft: h.RecallLeft,
 			ItemsCsv:  itemsCsv(h),
+			Heroism:   h.Heroism,
 		})
 	}
 	ents = extraSnapshot(s, ents)
@@ -721,6 +826,7 @@ func snapshotPayload(s *State) []byte {
 		Tick:        s.Tick,
 		Phase:       s.Phase,
 		MatchTime:   float64(s.MatchTimeTicks) * dt,
+		PrepLeft:    float64(s.PrepLeftTicks) * dt,
 		WinnerTeam:  winner,
 		Surrendered: s.Surrendered,
 		Entities:    ents,

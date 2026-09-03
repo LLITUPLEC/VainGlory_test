@@ -545,6 +545,9 @@ func nearestHostile(s *State, x, z float64, team int, rng float64, preferHero bo
 		if u.Kind == kindCrystal && alliedTurretAlive(s, u.Team) {
 			continue
 		}
+		if u.Kind == kindTurret && !enemyMinionNear(s, u.X, u.Z, u.Team, turretUnlockR) {
+			continue
+		}
 		d := dist(x, z, u.X, u.Z)
 		if d > rng {
 			continue
@@ -605,6 +608,7 @@ func hurtHit(s *State, srcID, srcTeam int, srcHero bool, dmg float64, dstID int,
 				if src := s.Heroes[srcID]; src != nil {
 					src.Kills++
 					src.Gold += heroBounty
+					src.GoldEarned += heroBounty
 				}
 			}
 		}
@@ -619,15 +623,23 @@ func hurtHit(s *State, srcID, srcTeam int, srcHero bool, dmg float64, dstID int,
 		return
 	}
 	if u.Kind == kindTurret && !enemyMinionNear(s, u.X, u.Z, u.Team, turretUnlockR) {
-		floor := u.MaxHP * (1 - turretLockHp)
-		if u.HP <= floor+0.01 {
-			return
+		pierce := false
+		if srcHero {
+			if src := s.Heroes[srcID]; src != nil && src.Heroism {
+				pierce = true
+			}
 		}
-		if u.HP-dmg < floor {
-			dmg = u.HP - floor
-		}
-		if dmg <= 0 {
-			return
+		if !pierce {
+			floor := u.MaxHP * (1 - turretLockHp)
+			if u.HP <= floor+0.01 {
+				return
+			}
+			if u.HP-dmg < floor {
+				dmg = u.HP - floor
+			}
+			if dmg <= 0 {
+				return
+			}
 		}
 	}
 	u.HP -= dmg
@@ -639,6 +651,10 @@ func hurtHit(s *State, srcID, srcTeam int, srcHero bool, dmg float64, dstID int,
 		if srcHero {
 			if src := s.Heroes[srcID]; src != nil {
 				src.Gold += u.Bounty
+				src.GoldEarned += u.Bounty
+				if u.Kind == kindMinion || u.Kind == kindCamp || u.Kind == kindBoss {
+					src.CreepKills++
+				}
 			}
 		}
 		if u.Kind == kindCrystal {

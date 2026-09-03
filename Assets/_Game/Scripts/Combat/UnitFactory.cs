@@ -207,6 +207,16 @@ namespace Ashfold
                 col.enabled = false;
         }
 
+        public static GameObject SpawnBoss(Transform parent, Vector3 pos)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            go.name = "Boss";
+            go.transform.SetParent(parent, false);
+            go.transform.position = pos;
+            MakeBoss(go, false);
+            return go;
+        }
+
         public static void MakeBoss(GameObject go, bool localAi = true)
         {
             if (go == null || go.GetComponent<CombatUnit>() != null)

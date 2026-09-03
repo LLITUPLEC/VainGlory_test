@@ -9,6 +9,7 @@ namespace Ashfold
         public CombatUnit Unit;
         int _aimSlot = -1;
         GameObject _aimMark;
+        GameObject _aimRange;
         float _aimOpenedAt = -10f;
 
         void Update()
@@ -141,49 +142,96 @@ namespace Ashfold
         void ClearAim(bool destroyMark)
         {
             _aimSlot = -1;
-            if (_aimMark == null)
-                return;
-            if (destroyMark)
+            if (_aimMark != null)
             {
-                Destroy(_aimMark);
-                _aimMark = null;
-                return;
+                if (destroyMark)
+                {
+                    Destroy(_aimMark);
+                    _aimMark = null;
+                }
+                else
+                    _aimMark.SetActive(false);
             }
-            _aimMark.SetActive(false);
+            if (_aimRange != null)
+            {
+                if (destroyMark)
+                {
+                    Destroy(_aimRange);
+                    _aimRange = null;
+                }
+                else
+                    _aimRange.SetActive(false);
+            }
         }
 
         void LateUpdate()
         {
-            if (_aimSlot < 0 || _aimMark == null)
+            if (_aimSlot < 0)
                 return;
             var cam = Camera.main;
-            if (cam == null)
+            if (cam == null || Hero == null)
+                return;
+            var def = Hero.Ability(_aimSlot);
+            var rank = Hero.Progress != null ? Hero.Progress.RankOf(_aimSlot) : 1;
+            rank = Mathf.Max(1, rank);
+
+            if (_aimRange != null)
+            {
+                _aimRange.SetActive(true);
+                var hp = Hero.transform.position;
+                var y = GroundProbe.SurfaceY(hp) + 0.25f;
+                _aimRange.transform.position = new Vector3(hp.x, y, hp.z);
+                var castR = def != null ? Mathf.Max(2f, def.Rng(rank)) : 8f;
+                _aimRange.transform.localScale = Vector3.one * castR;
+            }
+
+            if (_aimMark == null)
                 return;
             var ray = cam.ScreenPointToRay(PointerScreen());
-            if (!PlanePoint(ray, out var p))
+            if (!PlanePoint(ray, out var at))
                 return;
             _aimMark.SetActive(true);
-            _aimMark.transform.position = p + Vector3.up * 0.08f;
-            var def = Hero != null ? Hero.Ability(_aimSlot) : null;
-            var rank = Hero != null && Hero.Progress != null ? Hero.Progress.RankOf(_aimSlot) : 1;
-            var r = def != null ? Mathf.Max(1.6f, def.Dur(Mathf.Max(1, rank))) : 2f;
-            _aimMark.transform.localScale = new Vector3(r * 2f, 0.12f, r * 2f);
+            var markY = GroundProbe.SurfaceY(at) + 0.2f;
+            _aimMark.transform.position = new Vector3(at.x, markY, at.z);
+            var r = def != null ? Mathf.Max(1.6f, def.Dur(rank)) : 2f;
+            _aimMark.transform.localScale = Vector3.one * r;
         }
 
         void EnsureMark()
         {
-            if (_aimMark != null)
-            {
+            if (_aimMark == null)
+                _aimMark = MakeRangeCircle("AimMark", new Color(GameTheme.Gold.r, GameTheme.Gold.g, GameTheme.Gold.b, 0.95f), 0.22f);
+            else
                 _aimMark.SetActive(true);
-                return;
+
+            if (_aimRange == null)
+                _aimRange = MakeRangeCircle("AimRange", new Color(GameTheme.Teal.r, GameTheme.Teal.g, GameTheme.Teal.b, 0.95f), 0.28f);
+            else
+                _aimRange.SetActive(true);
+        }
+
+        static GameObject MakeRangeCircle(string name, Color color, float width)
+        {
+            var go = new GameObject(name);
+            var lr = go.AddComponent<LineRenderer>();
+            lr.loop = true;
+            lr.useWorldSpace = false;
+            lr.widthMultiplier = width;
+            lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            lr.receiveShadows = false;
+            lr.numCornerVertices = 4;
+            lr.numCapVertices = 4;
+            const int segments = 72;
+            lr.positionCount = segments;
+            for (var i = 0; i < segments; i++)
+            {
+                var a = (i / (float)segments) * Mathf.PI * 2f;
+                lr.SetPosition(i, new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)));
             }
-            _aimMark = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            var col = _aimMark.GetComponent<Collider>();
-            if (col != null)
-                Object.DestroyImmediate(col);
-            _aimMark.name = "AimMark";
-            _aimMark.layer = 2;
-            _aimMark.GetComponent<Renderer>().sharedMaterial = RuntimeMat.Make(new Color(GameTheme.Gold.r, GameTheme.Gold.g, GameTheme.Gold.b, 0.35f));
+            lr.sharedMaterial = RuntimeMat.Make(color);
+            lr.startColor = color;
+            lr.endColor = color;
+            return go;
         }
 
         void OnDisable()
